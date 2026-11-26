@@ -1,0 +1,92 @@
+import rateLimit, { ipKeyGenerator, type Options } from "express-rate-limit"
+
+import { isTest } from "../config/env.js"
+import { AppError } from "../lib/errors.js"
+
+/** Apply request limits to authentication and other sensitive endpoints. */
+
+function build(options: Partial<Options>) {
+  return rateLimit({
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    // Limits would make the test suite flaky and prove nothing.
+    skip: () => isTest,
+    handler: (_req, _res, next) => {
+      next(
+        new AppError(
+          429,
+          "RATE_LIMITED",
+          "Too many requests. Please wait a moment and try again."
+        )
+      )
+    },
+    ...options,
+  })
+}
+
+/** Sign-in and registration — where guessing actually gets an attacker somewhere. */
+export const authLimiter = build({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+})
+
+/**
+ * Live username availability, called on a debounced keystroke while someone
+ * fills in the signup form.
+ *
+ * The ceiling is high because a person choosing a name legitimately makes
+ * dozens of these, and a shared office or mobile-carrier IP multiplies that
+ * across everyone behind it. It exists at all because the endpoint is
+ * unauthenticated and answers "does this account exist?" — a cap is what keeps
+ * a convenience from being a bulk directory scrape. It is deliberately far
+ * below what enumerating a real wordlist would need.
+ */
+export const usernameCheckLimiter = build({
+  windowMs: 60 * 1000,
+  limit: 30,
+})
+
+/**
+ * Token refresh, which every page load performs once. Ten per quarter-hour —
+ * the sign-in ceiling — locks a normal user out of their own dashboard after a
+ * few reloads. The ceiling here is high because the endpoint is not a guessing
+ * target: it needs a valid httpOnly cookie, and rotation means a stolen token
+ * is single-use anyway.
+ */
+export const refreshLimiter = build({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+})
+
+/** Password reset requests — expensive (sends mail) and enumeration-adjacent. */
+export const passwordResetLimiter = build({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+})
+
+/**
+ * Withdrawal PIN attempts, keyed per authenticated user *and* per IP so a
+ * single account cannot be brute-forced from a botnet.
+ */
+export const pinLimiter = build({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  keyGenerator: (req) =>
+    req.auth?.userId ?? ipKeyGenerator(req.ip ?? "unknown"),
+})
+
+/** Broad ceiling for everything else. */
+export const generalLimiter = build({
+  windowMs: 60 * 1000,
+  limit: 120,
+})
+
+/**
+ * Public receipt lookups. The token is 24 random bytes, so this is not what
+ * stops someone guessing one — it stops a bored script hammering the endpoint,
+ * which is the only realistic abuse of a URL that is meant to be shared.
+ */
+export const receiptLimiter = build({
+  windowMs: 60 * 1000,
+  limit: 60,
+})

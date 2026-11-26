@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment files and credentials (examples are committed)
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+
+# Local tooling
+.claude/
+.vercel/
+.vscode/
+.idea/
+
+# Work in progress kept local
+design-preview/
+server/email-preview.ts
+
+# Test and debug output
+coverage/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
