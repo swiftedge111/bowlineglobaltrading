@@ -43,6 +43,16 @@ const envSchema = z
     EMAIL_FROM: z.string().default("Bowline Global Trading <noreply@example.com>"),
     SUPPORT_EMAIL: z.email().default("support@example.com"),
 
+    /**
+     * Bearer secret for `POST /internal/jobs/*`, called by an external
+     * scheduler. Unset disables those endpoints; the in-process schedule
+     * still runs.
+     */
+    CRON_SECRET: z
+      .string()
+      .min(32, "CRON_SECRET must be at least 32 characters")
+      .optional(),
+
     SEED_ADMIN_EMAIL: z.email().optional(),
     SEED_ADMIN_USERNAME: z.string().optional(),
     SEED_ADMIN_PASSWORD: z.string().optional(),

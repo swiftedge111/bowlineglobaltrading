@@ -150,6 +150,13 @@ export interface EntryInput {
   processedById?: string
   /** Defaults to COMPLETED for credits. */
   status?: TxStatus
+  /**
+   * When the money was earned, if that differs from when it is written.
+   * Catch-up plan accrual records each missed day at its own time, so the
+   * performance chart and the "today" and "this week" figures show it on the
+   * right day. Defaults to now.
+   */
+  createdAt?: Date
 }
 
 /**
@@ -162,19 +169,40 @@ export async function credit(
 ): Promise<Transaction> {
   assertPositive(input.amount)
 
-  return db.transaction.create({
-    data: {
-      userId: input.userId,
-      type: TxType.CREDIT,
-      category: input.category,
-      amount: round2(input.amount),
-      status: input.status ?? TxStatus.COMPLETED,
-      description: input.description ?? null,
-      metadata: input.metadata ?? Prisma.JsonNull,
-      processedById: input.processedById ?? null,
-      processedAt: input.processedById ? new Date() : null,
-    },
+  return db.transaction.create({ data: creditRow(input) })
+}
+
+/**
+ * Writes several credits in one statement. Used where a single event settles
+ * many entries at once, so a long catch-up does not hold its transaction open
+ * for one round trip per row.
+ */
+export async function creditMany(
+  inputs: EntryInput[],
+  db: Db = prisma
+): Promise<number> {
+  if (inputs.length === 0) return 0
+  inputs.forEach((input) => assertPositive(input.amount))
+
+  const { count } = await db.transaction.createMany({
+    data: inputs.map(creditRow),
   })
+  return count
+}
+
+function creditRow(input: EntryInput): Prisma.TransactionCreateManyInput {
+  return {
+    userId: input.userId,
+    type: TxType.CREDIT,
+    category: input.category,
+    amount: round2(input.amount),
+    status: input.status ?? TxStatus.COMPLETED,
+    description: input.description ?? null,
+    metadata: input.metadata ?? Prisma.JsonNull,
+    processedById: input.processedById ?? null,
+    processedAt: input.processedById ? new Date() : null,
+    ...(input.createdAt ? { createdAt: input.createdAt } : {}),
+  }
 }
 
 /**

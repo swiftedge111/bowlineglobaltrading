@@ -40,6 +40,7 @@ curl http://localhost:4000/api/v1/health
 | `npm run prisma:migrate` | Create + apply a migration |
 | `npm run prisma:studio` | Browse the database |
 | `npm run seed` | Seed admin + plans (idempotent) |
+| `npm run db:lockdown` | Close the Supabase Data API off from every table (see [Supabase lockdown](#supabase-lockdown)) |
 
 ---
 
@@ -52,7 +53,7 @@ src/
 ├── middleware/  authenticate · authorize · validate · rate-limit · error-handler · upload
 ├── modules/     one folder per domain: routes + controller + service + schema
 ├── services/    ledger · audit · email (cross-cutting business logic)
-├── jobs/        cron: expire-pins · accrue-plan-returns
+├── jobs/        in-process schedule: accrue-plan-returns (hourly + at startup)
 ├── app.ts       Express assembly
 └── index.ts     bootstrap
 ```
@@ -132,7 +133,7 @@ that touch the cookie need `credentials: "include"`.
 | POST | `/withdrawals/:id/cancel` | While still pending |
 | GET | `/plans` | **Public** |
 | GET / POST | `/subscriptions` | Subscribe to a plan |
-| POST | `/subscriptions/:id/cancel` | Returns the principal |
+| POST | `/subscriptions/:id/cancel` | Pays any owed periods, then returns the principal |
 
 ### Admin — `requireRole('ADMIN')` on every route
 
@@ -154,6 +155,38 @@ that touch the cookie need `credentials: "include"`.
 3. Admin approves (`COMPLETED`, money stays gone) or rejects (`REJECTED`,
    reservation released). Both send email and write an audit log entry.
 
+PINs need no expiry job. `consumePin` and the share link check `expiresAt`
+themselves, and lapsed PINs are marked `EXPIRED` whenever an admin lists,
+issues or revokes PINs, so the admin view is always accurate.
+
+### Plan returns
+
+A plan pays its daily return **once per full 24 hours after the subscription
+starts**. Period *k* ends at `startedAt + k days`, so a 30-day plan pays exactly
+30 times, then returns the principal. Subscribing at 23:59 does not earn a day's
+return at midnight.
+
+`accruePlanReturns()` works out what each subscription is owed from the clock
+and `accruedPeriods`, the count already paid, and pays all of it:
+
+- **Late runs catch up.** Every missed period is paid, each as its own ledger
+  entry dated to when it was earned, so balances, the performance chart and
+  "today's profit" stay right however late the job runs.
+- **Repeat runs are safe.** Each subscription is claimed with a compare-and-swap
+  on `accruedPeriods`, so concurrent or repeated runs never pay a period twice.
+- **Cancelling settles first.** Owed periods are paid before the principal is
+  returned. A plan whose term has already ended completes instead.
+
+It is triggered three ways, and none of them needs to be punctual:
+
+1. In-process, hourly at :05 (`src/jobs/index.ts`).
+2. Once at startup, which catches up after downtime or sleep.
+3. `POST /api/v1/internal/jobs/accrue-plan-returns` with
+   `Authorization: Bearer $CRON_SECRET`, for an external scheduler. This wakes
+   an instance that a host has idled. [`prisma/supabase-cron.sql`](prisma/supabase-cron.sql)
+   sets it up with Supabase pg_cron. Without `CRON_SECRET` the endpoint returns
+   404.
+
 ---
 
 ## Environment
@@ -171,6 +204,9 @@ Notes:
   `openssl rand -base64 48`.
 - `SUPABASE_*` and `RESEND_API_KEY` are optional in development (uploads and
   email degrade to no-ops) and **required** in production.
+- `CRON_SECRET` (32+ characters) enables the internal job endpoint. Set it on
+  the API and in Supabase Vault (see `prisma/supabase-cron.sql`) to the same
+  value. Generate with `openssl rand -base64 48`.
 
 ---
 
@@ -200,8 +236,23 @@ TEST_DATABASE_URL="$test_database_url" npm test
 npm ci
 npm run build
 npx prisma migrate deploy
+npm run db:lockdown
 npm start
 ```
+
+### Supabase lockdown
+
+Supabase serves the `public` schema over its Data API. This backend doesn't
+use that API, so `npm run db:lockdown` closes it off. It runs
+[`prisma/supabase-lockdown.sql`](prisma/supabase-lockdown.sql), which enables
+row-level security on every table and revokes the `anon` and `authenticated`
+roles' access, including on tables that later migrations create. The backend
+owns the tables, so it bypasses RLS and is unaffected.
+
+Run it after every `migrate deploy`. It is idempotent and takes a second. If
+you forget, new tables are still unreadable through the API, because the
+default privileges are already revoked, but RLS stays off on them until the
+script runs again. On plain PostgreSQL it only enables RLS.
 
 Set `NODE_ENV=production`, a real `CORS_ORIGINS`, and `COOKIE_DOMAIN` if the
 API and frontend share a parent domain. The app trusts one proxy hop

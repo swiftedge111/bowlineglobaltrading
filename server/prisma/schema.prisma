@@ -397,7 +397,11 @@ model Subscription {
   status    SubscriptionStatus @default(ACTIVE)
   startedAt DateTime           @default(now())
   endsAt    DateTime
-  /// UTC date of the last accrual, so the daily job is idempotent.
+  /// A plan pays once per full 24 hours after `startedAt`. This counts the
+  /// periods already paid, so accrual can catch up on any it missed and never
+  /// pays one twice. See `accrualSchedule` in plans.service.ts.
+  accruedPeriods Int @default(0)
+  /// End of the last paid period. For display only; `accruedPeriods` decides.
   lastAccruedOn DateTime?
   totalAccrued  Decimal        @db.Decimal(18, 2) @default(0)
 

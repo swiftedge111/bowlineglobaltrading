@@ -23,7 +23,12 @@ import {
   sendSubscriptionCompletedEmail,
   sendSubscriptionConfirmedEmail,
 } from "../../services/email/email.service.js"
-import { credit, debit, getBalanceSnapshot } from "../../services/ledger.service.js"
+import {
+  credit,
+  creditMany,
+  debit,
+  getBalanceSnapshot,
+} from "../../services/ledger.service.js"
 
 /** Investment plans and subscriptions. Seeded plan figures mirror the marketing page. */
 
@@ -100,7 +105,10 @@ export async function subscribe(
     )
   }
 
-  const endsAt = new Date()
+  // Both ends from one clock reading, so the term is exactly durationDays × 24h
+  // and `accrualSchedule` pays exactly durationDays periods.
+  const startedAt = new Date()
+  const endsAt = new Date(startedAt)
   endsAt.setUTCDate(endsAt.getUTCDate() + plan.durationDays)
 
   const subscription = await prisma.$transaction(
@@ -123,6 +131,7 @@ export async function subscribe(
           userId,
           planId: plan.id,
           principal,
+          startedAt,
           endsAt,
         },
         include: { plan: true },
@@ -183,7 +192,18 @@ export async function cancelSubscription(
     throw new ValidationError("That subscription is no longer active.")
   }
 
-  await prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx) => {
+    /*
+     * Settle what is owed before cancelling. Accrual runs on a schedule, so
+     * periods can be complete but not yet paid. Without this, cancelling
+     * between the end of a period and the next run would forfeit it.
+     *
+     * If the term has already ended, settling completes the plan and returns
+     * the principal. Commit that and report it, rather than cancelling.
+     */
+    const settled = await accrueSubscription(subscription.id, new Date(), tx)
+    if (settled?.matured) return { matured: settled }
+
     /*
      * Cancel first, refund second — and cancel conditionally.
      *
@@ -195,8 +215,8 @@ export async function cancelSubscription(
      * Ordering matters as much as the condition: claiming the subscription
      * before crediting means the caller who loses the race has already failed
      * by the time any money would move. Same compare-and-swap as `settle` and
-     * `unwind`; `accrueDailyReturns` below guards itself the same way via
-     * `lastAccruedOn`.
+     * `unwind`; `accrueSubscription` below guards itself the same way via
+     * `accruedPeriods`.
      */
     const claimed = await tx.subscription.updateMany({
       where: { id: subscription.id, status: SubscriptionStatus.ACTIVE },
@@ -218,7 +238,16 @@ export async function cancelSubscription(
       },
       tx
     )
+
+    return { matured: null }
   })
+
+  if (outcome.matured) {
+    sendMaturedEmail(outcome.matured)
+    throw new ValidationError(
+      "This plan has already completed. Its principal and returns are in your balance."
+    )
+  }
 
   void notifySubscriber(userId, async (user) => {
     const { balance } = await getBalanceSnapshot(userId)
@@ -231,103 +260,238 @@ export async function cancelSubscription(
   })
 }
 
+/* -------------------------------------------------------------- accrual */
+
+const PERIOD_MS = 24 * 60 * 60 * 1000
+
+type Schedulable = Pick<Subscription, "startedAt" | "endsAt" | "accruedPeriods">
+
 /**
- * Daily accrual, idempotent via `lastAccruedOn`: re-running on the same UTC
- * day is a no-op, so a restarted or duplicated job cannot double-pay.
+ * Where a subscription stands at a given moment.
+ *
+ * A plan pays once per full 24 hours after `startedAt`. Period k (counting
+ * from 1) ends at startedAt + k days, so a 30-day plan pays exactly 30 times.
+ * Someone who subscribes at 23:59 waits a full day like everyone else, rather
+ * than collecting a day's return at midnight one minute later.
+ *
+ * `owed` is what a run at `now` must pay. It is derived from the clock and the
+ * count already paid. A run that comes late (the server was asleep, deploying
+ * or down) therefore pays every period it missed. A second run at the same
+ * moment pays nothing.
  */
-export async function accrueDailyReturns(): Promise<{
+export function accrualSchedule(
+  subscription: Schedulable,
+  now: Date
+): { totalPeriods: number; duePeriods: number; owed: number; matured: boolean } {
+  const start = subscription.startedAt.getTime()
+  const end = subscription.endsAt.getTime()
+
+  // Rounded, so a few milliseconds between the two timestamps cannot add or
+  // remove a day.
+  const totalPeriods = Math.max(0, Math.round((end - start) / PERIOD_MS))
+  const matured = now.getTime() >= end
+  const elapsed = Math.floor((now.getTime() - start) / PERIOD_MS)
+  const duePeriods = matured
+    ? totalPeriods
+    : Math.min(totalPeriods, Math.max(0, elapsed))
+
+  return {
+    totalPeriods,
+    duePeriods,
+    owed: Math.max(0, duePeriods - subscription.accruedPeriods),
+    matured,
+  }
+}
+
+/** When period `k` ends. The last one ends exactly at `endsAt`. */
+function periodEnd(
+  subscription: Pick<Subscription, "startedAt" | "endsAt">,
+  k: number
+): Date {
+  return new Date(
+    Math.min(
+      subscription.startedAt.getTime() + k * PERIOD_MS,
+      subscription.endsAt.getTime()
+    )
+  )
+}
+
+interface AccrualOutcome {
+  periodsPaid: number
+  credited: Money
+  matured: boolean
+  /** For the completion email, which is sent only after the commit. */
+  subscription: Subscription & { plan: Plan }
+}
+
+/**
+ * Pays what one subscription is owed at `now`, and returns the principal if
+ * the term has ended.
+ *
+ * Returns null when nothing was due, or when a concurrent run got there first.
+ * It takes the caller's transaction so `cancelSubscription` can settle what is
+ * owed and cancel in a single commit.
+ */
+async function accrueSubscription(
+  subscriptionId: string,
+  now: Date,
+  tx: Prisma.TransactionClient
+): Promise<AccrualOutcome | null> {
+  const subscription = await tx.subscription.findUnique({
+    where: { id: subscriptionId },
+    include: { plan: true },
+  })
+  if (!subscription || subscription.status !== SubscriptionStatus.ACTIVE) {
+    return null
+  }
+
+  const { duePeriods, owed, matured } = accrualSchedule(subscription, now)
+  if (owed === 0 && !matured) return null
+
+  const payout = bpsOf(subscription.principal, subscription.plan.dailyReturnBps)
+  const credited = round2(payout.mul(owed))
+
+  // A compare-and-swap on the count already paid, the same guard `cancel`
+  // uses on status. Two runs that read the same count cannot both win, and
+  // the loser fails here, before any money moves.
+  const claimed = await tx.subscription.updateMany({
+    where: {
+      id: subscription.id,
+      status: SubscriptionStatus.ACTIVE,
+      accruedPeriods: subscription.accruedPeriods,
+    },
+    data: {
+      accruedPeriods: Math.max(duePeriods, subscription.accruedPeriods),
+      ...(owed > 0
+        ? {
+            lastAccruedOn: periodEnd(subscription, duePeriods),
+            totalAccrued: { increment: credited },
+          }
+        : {}),
+      ...(matured ? { status: SubscriptionStatus.COMPLETED } : {}),
+    },
+  })
+  if (claimed.count === 0) return null
+
+  // A principal small enough to round a day's return down to $0.00 still uses
+  // up the period. There is just no ledger entry for it.
+  if (owed > 0 && payout.greaterThan(0)) {
+    const first = subscription.accruedPeriods + 1
+
+    await creditMany(
+      Array.from({ length: owed }, (_, index) => {
+        const period = first + index
+        return {
+          userId: subscription.userId,
+          amount: payout,
+          category: TxCategory.PLAN_PAYOUT,
+          description: `${subscription.plan.name} plan daily return`,
+          metadata: { subscriptionId: subscription.id, period },
+          // Dated to the day it was earned, not the day the job ran.
+          createdAt: periodEnd(subscription, period),
+        }
+      }),
+      tx
+    )
+  }
+
+  if (matured) {
+    await credit(
+      {
+        userId: subscription.userId,
+        amount: subscription.principal,
+        category: TxCategory.PLAN_PRINCIPAL,
+        description: `${subscription.plan.name} plan matured — principal returned`,
+        metadata: { subscriptionId: subscription.id },
+        createdAt: subscription.endsAt,
+      },
+      tx
+    )
+  }
+
+  return { periodsPaid: owed, credited, matured, subscription }
+}
+
+function sendMaturedEmail(outcome: AccrualOutcome): void {
+  const { subscription } = outcome
+
+  void notifySubscriber(subscription.userId, async (user) => {
+    const { balance } = await getBalanceSnapshot(subscription.userId)
+
+    return sendSubscriptionCompletedEmail(user, {
+      planName: subscription.plan.name,
+      principal: serialize(subscription.principal),
+      // `totalAccrued` is the pre-run figure; this run's payouts are the last.
+      totalEarned: serialize(subscription.totalAccrued.add(outcome.credited)),
+      newBalance: serialize(balance),
+    })
+  })
+}
+
+/**
+ * Pays every active subscription what it is owed, and completes those whose
+ * term has ended.
+ *
+ * Safe to run at any time and as often as you like: on a schedule, when the
+ * server starts, from the internal job endpoint, or all three at once. Each
+ * subscription settles in its own transaction, so one failure cannot stop the
+ * rest of the run.
+ */
+export async function accruePlanReturns(now: Date = new Date()): Promise<{
   processed: number
+  periodsPaid: number
+  matured: number
   credited: string
 }> {
-  const now = new Date()
-  const today = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  )
-
-  const due = await prisma.subscription.findMany({
+  const candidates = await prisma.subscription.findMany({
     where: {
       status: SubscriptionStatus.ACTIVE,
-      OR: [{ lastAccruedOn: null }, { lastAccruedOn: { lt: today } }],
+      OR: [
+        { startedAt: { lte: new Date(now.getTime() - PERIOD_MS) } },
+        { endsAt: { lte: now } },
+      ],
     },
-    include: { plan: true },
+    select: { id: true, startedAt: true, endsAt: true, accruedPeriods: true },
+    orderBy: { startedAt: "asc" },
   })
 
   let processed = 0
+  let periodsPaid = 0
+  let matured = 0
   let credited = ZERO
 
-  for (const subscription of due) {
-    const payout = bpsOf(subscription.principal, subscription.plan.dailyReturnBps)
-    const matured = subscription.endsAt <= now
+  for (const candidate of candidates) {
+    // Most rows are already up to date. Skip them without a transaction.
+    const schedule = accrualSchedule(candidate, now)
+    if (schedule.owed === 0 && !schedule.matured) continue
 
     try {
-      await prisma.$transaction(async (tx) => {
-        // Guard inside the transaction so two workers cannot both pay out.
-        const claimed = await tx.subscription.updateMany({
-          where: {
-            id: subscription.id,
-            status: SubscriptionStatus.ACTIVE,
-            OR: [{ lastAccruedOn: null }, { lastAccruedOn: { lt: today } }],
-          },
-          data: {
-            lastAccruedOn: today,
-            totalAccrued: { increment: payout },
-            ...(matured ? { status: SubscriptionStatus.COMPLETED } : {}),
-          },
-        })
-
-        if (claimed.count === 0) return
-
-        await credit(
-          {
-            userId: subscription.userId,
-            amount: payout,
-            category: TxCategory.PLAN_PAYOUT,
-            description: `${subscription.plan.name} plan daily return`,
-            metadata: { subscriptionId: subscription.id },
-          },
-          tx
-        )
-
-        if (matured) {
-          await credit(
-            {
-              userId: subscription.userId,
-              amount: subscription.principal,
-              category: TxCategory.PLAN_PRINCIPAL,
-              description: `${subscription.plan.name} plan matured — principal returned`,
-              metadata: { subscriptionId: subscription.id },
-            },
-            tx
-          )
+      const outcome = await prisma.$transaction(
+        (tx) => accrueSubscription(candidate.id, now, tx),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+          timeout: 30_000,
         }
+      )
+      if (!outcome) continue
 
-        processed += 1
-        credited = credited.add(payout)
-      })
+      processed += 1
+      periodsPaid += outcome.periodsPaid
+      credited = credited.add(outcome.credited)
 
-      if (matured) {
-        void notifySubscriber(subscription.userId, async (user) => {
-          const { balance } = await getBalanceSnapshot(subscription.userId)
-
-          return sendSubscriptionCompletedEmail(user, {
-            planName: subscription.plan.name,
-            principal: serialize(subscription.principal),
-            // `totalAccrued` is the pre-run figure; today's payout is the last.
-            totalEarned: serialize(subscription.totalAccrued.add(payout)),
-            newBalance: serialize(balance),
-          })
-        })
+      if (outcome.matured) {
+        matured += 1
+        sendMaturedEmail(outcome)
       }
     } catch (error) {
-      // One bad subscription must not stop the rest of the run.
       logger.error(
-        { err: error, subscriptionId: subscription.id },
+        { err: error, subscriptionId: candidate.id },
         "Plan accrual failed"
       )
     }
   }
 
-  return { processed, credited: serialize(credited) }
+  return { processed, periodsPaid, matured, credited: serialize(credited) }
 }
 
 export async function getAvailableForSubscription(

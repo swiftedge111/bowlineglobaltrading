@@ -6,6 +6,7 @@ import { adminRouter } from "./modules/admin/admin.routes.js"
 import { authRouter } from "./modules/auth/auth.routes.js"
 import { depositsRouter } from "./modules/deposits/deposits.routes.js"
 import { holdingsRouter } from "./modules/holdings/holdings.routes.js"
+import { internalRouter } from "./modules/internal/internal.routes.js"
 import { pinShareRouter } from "./modules/pins/pins.routes.js"
 import { plansRouter, subscriptionsRouter } from "./modules/plans/plans.routes.js"
 import { portfolioRouter } from "./modules/portfolio/portfolio.routes.js"
@@ -44,3 +45,6 @@ apiRouter.use("/subscriptions", subscriptionsRouter)
 
 // ---- admin (authenticate + requireAdmin applied inside) -------------------
 apiRouter.use("/admin", adminRouter)
+
+// ---- scheduler (CRON_SECRET bearer, checked inside) ----------------------
+apiRouter.use("/internal", internalRouter)

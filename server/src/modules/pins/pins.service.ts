@@ -56,8 +56,10 @@ export async function issuePin(params: {
   const pin = generateNumericPin(params.length)
   const expiresAt = new Date(Date.now() + params.ttlMinutes * 60 * 1000)
 
-  // Only one live PIN per user — issuing a new one supersedes the old.
+  // Only one live PIN per user — issuing a new one supersedes the old. Expire
+  // first, so a PIN that had already lapsed is recorded as EXPIRED, not REVOKED.
   const record = await prisma.$transaction(async (tx) => {
+    await expireStalePins(tx)
     await tx.withdrawalPin.updateMany({
       where: { userId: params.userId, status: PinStatus.ACTIVE },
       data: { status: PinStatus.REVOKED },
@@ -200,6 +202,8 @@ export async function consumePin(
 }
 
 export async function listPins(userId?: string) {
+  await expireStalePins()
+
   return prisma.withdrawalPin.findMany({
     where: userId ? { userId } : {},
     orderBy: { createdAt: "desc" },
@@ -216,6 +220,9 @@ export async function listPins(userId?: string) {
  *   revoked — re-deleting must not fire a second email.
  */
 export async function revokePin(id: string): Promise<User | null> {
+  // A lapsed PIN is expired, not revoked, so the user is not told it was cancelled.
+  await expireStalePins()
+
   const revoked = await prisma.withdrawalPin.updateMany({
     where: { id, status: PinStatus.ACTIVE },
     data: { status: PinStatus.REVOKED },
@@ -231,9 +238,19 @@ export async function revokePin(id: string): Promise<User | null> {
   return pin?.user ?? null
 }
 
-/** Housekeeping for the cron job; expiry is also enforced at read time. */
-export async function expireStalePins(): Promise<number> {
-  const result = await prisma.withdrawalPin.updateMany({
+/**
+ * Records lapsed PINs as EXPIRED.
+ *
+ * Security never depends on this. `consumePin` and the share link check
+ * `expiresAt` themselves. It keeps the stored status truthful for what an
+ * admin sees and does, so it runs before every admin read and change.
+ * Previously an hourly job did it, and a lapsed PIN showed as ACTIVE until
+ * the job ran.
+ */
+export async function expireStalePins(
+  db: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<number> {
+  const result = await db.withdrawalPin.updateMany({
     where: { status: PinStatus.ACTIVE, expiresAt: { lt: new Date() } },
     data: { status: PinStatus.EXPIRED },
   })
