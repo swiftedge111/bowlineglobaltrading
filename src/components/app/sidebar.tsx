@@ -37,10 +37,10 @@ export function Sidebar({
   const pathname = usePathname()
 
   return (
-    <div className="flex h-full flex-col border-r border-secondary-200/70 bg-secondary-50/60">
+    <div className="flex h-full flex-col border-r border-secondary-200 bg-white">
       <div
         className={cn(
-          "flex h-16 shrink-0 items-center border-b border-secondary-200/70",
+          "flex h-16 shrink-0 items-center border-b border-secondary-200",
           collapsed ? "justify-center px-2" : "px-5"
         )}
       >
@@ -96,8 +96,8 @@ export function Sidebar({
                 "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors outline-none focus-visible:ring-4 focus-visible:ring-primary-200",
                 collapsed && "justify-center px-2",
                 active
-                  ? "bg-primary-600 text-white shadow-sm shadow-primary-600/20"
-                  : "text-secondary-600 hover:bg-secondary-200/60 hover:text-secondary-900"
+                  ? "bg-primary-700 text-white shadow-sm shadow-primary-700/25"
+                  : "text-secondary-600 hover:bg-secondary-50 hover:text-primary-700"
               )}
             >
               <Icon className="size-4.5 shrink-0" />

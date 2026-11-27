@@ -4,6 +4,8 @@ import { useState, useSyncExternalStore } from "react"
 import { usePathname } from "next/navigation"
 import { Dialog } from "radix-ui"
 
+import theme from "@/app/bowline-theme.module.css"
+
 import { RequireAuth } from "@/components/app/require-auth"
 import { Sidebar } from "@/components/app/sidebar"
 import { Topbar } from "@/components/app/topbar"
@@ -17,7 +19,11 @@ import {
 import { cn } from "@/lib/utils"
 
 /**
- * The signed-in chrome: a light sidebar, a white content column, and the topbar.
+ * The signed-in chrome: a white sidebar, a tinted content column, and the topbar.
+ *
+ * Uses the Bowline theme, like the marketing and auth screens. Anything Radix
+ * portals to <body> (the drawer, menus) sits outside this tree and has to
+ * carry `theme.bowline` itself, or it falls back to the default palette.
  *
  * Both the user app and the admin panel render through this — they differ only
  * in the nav they pass and the role badge, so there is one shell to keep
@@ -54,7 +60,7 @@ export function AppShell({
 
   return (
     <RequireAuth adminOnly={adminOnly}>
-      <div className="flex min-h-screen bg-white">
+      <div className={cn(theme.bowline, "flex min-h-screen bg-secondary-50 text-secondary-900")}>
         <aside
           className={cn(
             "fixed inset-y-0 left-0 z-40 hidden shrink-0 transition-[width] duration-200 lg:block",
@@ -68,7 +74,7 @@ export function AppShell({
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-40 bg-secondary-900/40 backdrop-blur-sm lg:hidden" />
             <Dialog.Content
-              className="fixed inset-y-0 left-0 z-50 w-72 outline-none lg:hidden"
+              className={cn(theme.bowline, "fixed inset-y-0 left-0 z-50 w-72 outline-none lg:hidden")}
               aria-describedby={undefined}
             >
               <Dialog.Title className="sr-only">Navigation</Dialog.Title>
@@ -93,7 +99,7 @@ export function AppShell({
               collapsed={collapsed}
               onToggleSidebar={toggleCollapsed}
             />
-            <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+            <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
           </div>
         </Dialog.Root>
       </div>

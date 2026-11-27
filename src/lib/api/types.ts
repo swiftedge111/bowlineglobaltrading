@@ -112,6 +112,11 @@ export interface PortfolioSummary {
   balance: string
   available: string
   reserved: string
+  /** Principal locked in active plans. Not part of `balance`. */
+  inPlans: string
+  /** `balance` plus `inPlans`. */
+  accountValue: string
+  /** Lifetime deposits and holding credits. */
   investedCapital: string
   profitEarned: string
   todayProfit: string
@@ -294,6 +299,12 @@ export interface Subscription {
   status: SubscriptionStatus
   startedAt: string
   endsAt: string
+  /** What each daily period pays, e.g. `"12.00"`. */
+  dailyPayout: string
+  paidPeriods: number
+  totalPeriods: number
+  /** ISO time the next return is earned; null once the plan stops paying. */
+  nextPayoutAt: string | null
 }
 
 /* ------------------------------------------------------------------ admin */

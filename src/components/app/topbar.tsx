@@ -4,6 +4,8 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DropdownMenu } from "radix-ui"
+
+import theme from "@/app/bowline-theme.module.css"
 import {
   ChevronDown,
   LogOut,
@@ -54,7 +56,7 @@ export function Topbar({
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-secondary-200/70 bg-white/85 px-4 backdrop-blur-md sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-secondary-200 bg-white/90 px-4 backdrop-blur-md sm:px-6 lg:px-8">
       <button
         type="button"
         onClick={onOpenMenu}
@@ -96,7 +98,7 @@ export function Topbar({
             )}
             aria-label="Account menu"
           >
-            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary-600 text-xs font-bold text-white">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-linear-to-br from-primary-600 to-primary-800 text-xs font-bold text-white">
               {initials(user?.fullName)}
             </span>
             <span className="hidden text-left sm:block">
@@ -114,7 +116,7 @@ export function Topbar({
             <DropdownMenu.Content
               align="end"
               sideOffset={8}
-              className="z-50 w-60 rounded-xl border border-secondary-200/70 bg-white p-1.5 shadow-xl"
+              className={cn(theme.bowline, "z-50 w-60 rounded-xl border border-secondary-200 bg-white p-1.5 shadow-xl shadow-primary-950/10")}
             >
               <div className="border-b border-secondary-100 px-3 py-2.5">
                 <p className="truncate text-sm font-semibold text-secondary-900">

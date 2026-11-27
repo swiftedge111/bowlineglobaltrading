@@ -25,17 +25,45 @@ export interface AreaChartPoint {
 
 const PADDING = { top: 16, right: 16, bottom: 28, left: 16 }
 
+/**
+ * `inverse` is for a dark card: the light-blue line and wash from the marketing
+ * portfolio preview, so the signed-in chart reads as the same product.
+ */
+const TONES = {
+  default: {
+    line: "var(--color-primary-600)",
+    fill: "var(--color-primary-500)",
+    fillOpacity: 0.28,
+    guide: "var(--color-secondary-300)",
+    grid: "var(--color-secondary-200)",
+    axis: "text-secondary-400",
+    skeleton: "",
+  },
+  inverse: {
+    line: "#89d9ff",
+    fill: "#7acdfa",
+    fillOpacity: 0.38,
+    guide: "rgba(255,255,255,0.35)",
+    grid: "rgba(255,255,255,0.15)",
+    axis: "text-primary-100",
+    skeleton: "bg-white/10",
+  },
+} as const
+
 export function AreaChart({
   points,
   height = 260,
   loading = false,
+  tone = "default",
   className,
 }: {
   points: AreaChartPoint[]
   height?: number
   loading?: boolean
+  tone?: keyof typeof TONES
   className?: string
 }) {
+  const colors = TONES[tone]
   const gradientId = useId()
   const [width, setWidth] = useState(0)
   const [hovered, setHovered] = useState<number | null>(null)
@@ -112,7 +140,12 @@ export function AreaChart({
   )
 
   if (loading) {
-    return <Skeleton className={cn("w-full rounded-xl", className)} style={{ height }} />
+    return (
+      <Skeleton
+        className={cn("w-full rounded-xl", colors.skeleton, className)}
+        style={{ height }}
+      />
+    )
   }
 
   if (points.length === 0) {
@@ -145,19 +178,33 @@ export function AreaChart({
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-primary-500)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--color-primary-500)" stopOpacity="0" />
+            <stop offset="0%" stopColor={colors.fill} stopOpacity={colors.fillOpacity} />
+            <stop offset="100%" stopColor={colors.fill} stopOpacity="0" />
           </linearGradient>
         </defs>
 
         {geometry && (
           <>
+            {[0.25, 0.5, 0.75].map((ratio) => {
+              const y = PADDING.top + ratio * (height - PADDING.top - PADDING.bottom)
+              return (
+                <line
+                  key={ratio}
+                  x1={0}
+                  x2={width}
+                  y1={y}
+                  y2={y}
+                  stroke={colors.grid}
+                  strokeDasharray="2 5"
+                />
+              )
+            })}
             <path d={geometry.area} fill={`url(#${gradientId})`} />
             <path
               d={geometry.line}
               fill="none"
-              stroke="var(--color-primary-600)"
-              strokeWidth={2}
+              stroke={colors.line}
+              strokeWidth={tone === "inverse" ? 2.5 : 2}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -169,7 +216,7 @@ export function AreaChart({
                   y1={PADDING.top}
                   x2={activeCoord.x}
                   y2={height - PADDING.bottom}
-                  stroke="var(--color-secondary-300)"
+                  stroke={colors.guide}
                   strokeDasharray="4 4"
                 />
                 <circle
@@ -177,7 +224,7 @@ export function AreaChart({
                   cy={activeCoord.y}
                   r={5}
                   fill="white"
-                  stroke="var(--color-primary-600)"
+                  stroke={colors.line}
                   strokeWidth={2.5}
                 />
               </>
@@ -186,7 +233,7 @@ export function AreaChart({
         )}
       </svg>
 
-      <div className="mt-1 flex justify-between px-1 text-[11px] text-secondary-400">
+      <div className={cn("mt-1 flex justify-between px-1 text-[11px]", colors.axis)}>
         <span>{formatDate(points[0]?.date)}</span>
         {points.length > 1 && <span>{formatDate(points.at(-1)?.date)}</span>}
       </div>
