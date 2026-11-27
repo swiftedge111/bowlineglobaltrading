@@ -12,6 +12,7 @@ import {
   ScrollText,
   Settings,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react"
 
@@ -63,6 +64,64 @@ export const adminNav: NavItem[] = [
  */
 const extraTitles: Record<string, string> = {
   "/welcome": "Welcome",
+  "/wallet": "Wallet",
+}
+
+/**
+ * The client app's bottom tab bar on phones and small tablets.
+ *
+ * A finance app is used for the same few things again and again, so those sit
+ * one thumb-tap away. Everything else lives under More. `match` lists every
+ * route that lights a tab, so Deposit and Withdraw keep Wallet active.
+ */
+export interface MobileTab {
+  href: string
+  label: string
+  icon: LucideIcon
+  match: string[]
+  /** Light only on `match` itself, never below it — for an index like `/admin`. */
+  exact?: boolean
+}
+
+export const mobileTabs: MobileTab[] = [
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard, match: ["/dashboard"] },
+  { href: "/markets", label: "Markets", icon: CandlestickChart, match: ["/markets"] },
+  { href: "/plans", label: "Plans", icon: Coins, match: ["/plans"] },
+  { href: "/wallet", label: "Wallet", icon: Wallet, match: ["/wallet", "/deposit", "/withdraw"] },
+]
+
+/** Under the More tab. */
+export const moreLinks: NavItem[] = [
+  { href: "/transactions", label: "Transactions", icon: ReceiptText },
+  { href: "/calculator", label: "Calculator", icon: Calculator },
+  { href: "/settings", label: "Settings", icon: Settings },
+]
+
+/**
+ * The admin panel on a phone is mostly about clearing the two review queues,
+ * so they get tabs of their own (with live counts) beside Overview and Users.
+ */
+export const adminMobileTabs: MobileTab[] = [
+  { href: "/admin", label: "Overview", icon: LayoutDashboard, match: ["/admin"], exact: true },
+  { href: "/admin/deposits", label: "Deposits", icon: ArrowDownToLine, match: ["/admin/deposits"] },
+  { href: "/admin/withdrawals", label: "Withdrawals", icon: ArrowUpFromLine, match: ["/admin/withdrawals"] },
+  { href: "/admin/users", label: "Users", icon: Users, match: ["/admin/users"] },
+]
+
+export const adminMoreLinks: NavItem[] = [
+  { href: "/admin/plans", label: "Investment plans", icon: Coins },
+  { href: "/admin/subscriptions", label: "Subscriptions", icon: Layers },
+  { href: "/admin/pins", label: "Withdrawal PINs", icon: KeyRound },
+  { href: "/admin/payment-methods", label: "Payment methods", icon: CreditCard },
+  { href: "/admin/audit-logs", label: "Audit log", icon: ScrollText },
+]
+
+export function isTabActive(pathname: string, tab: MobileTab): boolean {
+  return tab.exact ? tab.match.includes(pathname) : matchesAny(pathname, tab.match)
+}
+
+export function matchesAny(pathname: string, prefixes: string[]): boolean {
+  return prefixes.some((href) => pathname === href || pathname.startsWith(`${href}/`))
 }
 
 /** Active when it is the route, or — unless `exact` — an ancestor of it. */

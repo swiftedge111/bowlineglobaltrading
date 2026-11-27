@@ -1,4 +1,12 @@
+import type { Viewport } from "next"
+
 import { AppShell } from "@/components/app/app-shell"
+
+/**
+ * `cover` lets the page draw under the iPhone home indicator, so the bottom tab
+ * bar can pad itself with `env(safe-area-inset-bottom)` and sit clear of it.
+ */
+export const viewport: Viewport = { viewportFit: "cover" }
 
 /**
  * Every signed-in user page renders inside the shell.

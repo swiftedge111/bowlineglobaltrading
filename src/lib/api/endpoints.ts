@@ -1,12 +1,16 @@
 import { request } from "./client"
 import type {
+  DeviceSession,
   AdminDepositRow,
   AdminPin,
   AdminPlan,
   AdminStats,
   AdminSubscriptionRow,
+  AdminUserCounts,
   AdminUserDetail,
   AdminUserListItem,
+  AdminUserSort,
+  Role,
   AdminWithdrawalRow,
   AuditLogEntry,
   CreateWithdrawalInput,
@@ -33,6 +37,7 @@ import type {
   Subscription,
   SubscriptionStatus,
   Transaction,
+  TransactionSummary,
   TxCategory,
   TxStatus,
   TxType,
@@ -63,6 +68,11 @@ export const auth = {
 
   logoutEverywhere: () =>
     request<void>("/auth/logout-all", { method: "POST" }),
+
+  sessions: () => request<{ sessions: DeviceSession[] }>("/auth/sessions"),
+
+  revokeSession: (id: string) =>
+    request<void>(`/auth/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   forgotPassword: (email: string) =>
     request<{ message: string }>("/auth/forgot-password", {
@@ -105,7 +115,7 @@ export const auth = {
 export const users = {
   me: () => request<{ user: PublicUser }>("/users/me"),
 
-  updateProfile: (input: { fullName?: string; phone?: string | null }) =>
+  updateProfile: (input: { fullName?: string; phone?: string; contactPhone?: string }) =>
     request<{ user: PublicUser }>("/users/me", {
       method: "PATCH",
       body: input,
@@ -125,14 +135,26 @@ export const portfolio = {
     request<PerformanceSeries>("/portfolio/performance", { query: { period } }),
 }
 
+// A type alias, not an interface, so it satisfies the query's index signature.
+export type TransactionFilters = {
+  type?: TxType
+  status?: TxStatus
+  category?: TxCategory
+  /** ISO timestamp, inclusive. */
+  from?: string
+  /** ISO timestamp, exclusive. */
+  to?: string
+  /** Matches the description, ignoring case. */
+  q?: string
+}
+
 export const transactions = {
-  list: (params: {
-    page?: number
-    limit?: number
-    type?: TxType
-    status?: TxStatus
-    category?: TxCategory
-  } = {}) => request<Paginated<Transaction>>("/transactions", { query: params }),
+  list: (params: TransactionFilters & { page?: number; limit?: number } = {}) =>
+    request<Paginated<Transaction>>("/transactions", { query: params }),
+
+  /** Totals for the same filters as `list`. */
+  summary: (params: TransactionFilters = {}) =>
+    request<TransactionSummary>("/transactions/summary", { query: params }),
 }
 
 export const holdings = {
@@ -209,8 +231,12 @@ export const admin = {
     limit?: number
     search?: string
     status?: UserStatus
+    role?: Role
+    sort?: AdminUserSort
   } = {}) =>
     request<Paginated<AdminUserListItem>>("/admin/users", { query: params }),
+
+  userCounts: () => request<AdminUserCounts>("/admin/users/summary"),
 
   user: (uid: string) => request<AdminUserDetail>(`/admin/users/${uid}`),
 

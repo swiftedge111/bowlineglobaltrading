@@ -198,13 +198,20 @@ let refreshInFlight: Promise<PublicUser | null> | null = null
  * without this they would each POST /auth/refresh, and since the server rotates
  * the refresh token on every use, the second and third would be rejected as
  * replays and sign the user out.
+ *
+ * The same race exists between tabs, which share the cookie but not this
+ * module: a restored browser session reloads every tab at once. A Web Lock
+ * queues them, and because the cookie jar is shared, each tab that gets the
+ * lock after another has rotated sends the new token rather than the spent one.
  */
 export function refreshSession(): Promise<PublicUser | null> {
   refreshInFlight ??= (async () => {
     try {
-      const data = await request<{ user: PublicUser; accessToken: string }>(
-        "/auth/refresh",
-        { method: "POST", skipAuthRetry: true }
+      const data = await acrossTabs(() =>
+        request<{ user: PublicUser; accessToken: string }>("/auth/refresh", {
+          method: "POST",
+          skipAuthRetry: true,
+        })
       )
       accessToken = data.accessToken
       sessionListener?.(data.user)
@@ -219,6 +226,16 @@ export function refreshSession(): Promise<PublicUser | null> {
   })()
 
   return refreshInFlight
+}
+
+/** Runs `task` while holding a lock shared by every tab on this origin. */
+async function acrossTabs<T>(task: () => Promise<T>): Promise<T> {
+  if (typeof navigator === "undefined" || !navigator.locks) return task()
+  let result: T | undefined
+  await navigator.locks.request("bowline-auth-refresh", async () => {
+    result = await task()
+  })
+  return result as T
 }
 
 /**

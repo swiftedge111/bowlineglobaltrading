@@ -64,10 +64,27 @@ export interface PublicUser {
   phone: string | null
   /** ISO 3166-1 alpha-2. Null for accounts predating the field. */
   country: string | null
+  /** E.164 WhatsApp / Telegram number. Null for accounts predating the field. */
+  contactPhone: string | null
+  emailVerified: boolean
   role: Role
   status: UserStatus
   createdAt: string
   lastLoginAt: string | null
+}
+
+/** A signed-in device, as listed in Settings. */
+export interface DeviceSession {
+  id: string
+  userAgent: string | null
+  ip: string | null
+  /** When this device last refreshed its sign-in. */
+  lastActiveAt: string
+  expiresAt: string
+  /** False when "keep me signed in" was not ticked. */
+  persistent: boolean
+  /** The session making this request. */
+  current: boolean
 }
 
 export interface SessionPayload {
@@ -163,6 +180,15 @@ export interface Transaction {
   description: string | null
   metadata: unknown
   createdAt: string
+}
+
+export interface TransactionSummary {
+  count: number
+  /** Settled credits. */
+  moneyIn: string
+  /** Settled debits. */
+  moneyOut: string
+  pending: { count: number; amount: string }
 }
 
 /* --------------------------------------------------------------- deposits */
@@ -310,14 +336,34 @@ export interface Subscription {
 /* ------------------------------------------------------------------ admin */
 
 export interface AdminStats {
-  users: { total: number; active: number }
-  queues: { pendingDeposits: number; pendingWithdrawals: number }
+  users: { total: number; active: number; newToday: number; newThisWeek: number }
+  queues: {
+    pendingDeposits: number
+    pendingDepositsAmount: string
+    pendingWithdrawals: number
+    pendingWithdrawalsAmount: string
+  }
   ledger: {
     totalCredited: string
     totalDebited: string
-    /** Platform-wide liability to clients. */
+    /** Cash balances plus principal in active plans: what clients are owed. */
     clientLiability: string
+    clientCash: string
+    inPlans: string
+    /** Held against pending withdrawals; part of clientCash. */
     reserved: string
+  }
+  plans: { active: number; maturingThisWeek: number; maturingPrincipal: string }
+  /** Real money in and out over `days`, excluding internal plan transfers. */
+  flows: {
+    days: number
+    deposits: string
+    depositCount: number
+    /** Includes withdrawal fees. */
+    withdrawals: string
+    withdrawalCount: number
+    returnsPaid: string
+    series: Array<{ date: string; deposits: string; withdrawals: string }>
   }
 }
 
@@ -334,8 +380,23 @@ export interface AdminUserListItem {
   status: UserStatus
   lastLoginAt: string | null
   createdAt: string
+  emailVerified: boolean
   balance: string
   available: string
+  /** Principal in active plans; owed to the client on top of `balance`. */
+  inPlans: string
+}
+
+export type AdminUserSort = "newest" | "oldest" | "lastSeen" | "name"
+
+/** Tab counts for the Users screen. All but `admins` count clients only. */
+export interface AdminUserCounts {
+  clients: number
+  active: number
+  suspended: number
+  unverified: number
+  newThisWeek: number
+  admins: number
 }
 
 export interface AdminUserDetail {
@@ -353,13 +414,29 @@ export interface AdminUserDetail {
     signupIp: string | null
     /** Best-effort ISO-2 country inferred from the registration IP. */
     signupCountry: string | null
+    emailVerified: boolean
     role: Role
     status: UserStatus
     lastLoginAt: string | null
     lastLoginIp: string | null
     createdAt: string
   }
-  balance: { balance: string; available: string; reserved: string }
+  balance: {
+    balance: string
+    available: string
+    reserved: string
+    /** Principal in active plans. */
+    inPlans: string
+    /** `balance + inPlans`: everything the platform owes this client. */
+    accountValue: string
+  }
+  /** Completed movements over the account's life, net of reversals. */
+  lifetime: { deposited: string; withdrawn: string; earned: string }
+  /** Requests waiting for review, oldest first. */
+  pending: {
+    deposits: Array<{ id: string; amount: string; method: DepositMethod; createdAt: string }>
+    withdrawals: Array<{ id: string; amount: string; fee: string; method: WithdrawalMethod; createdAt: string }>
+  }
   holdings: HoldingSummary[]
   subscriptions: Array<{
     id: string
@@ -367,7 +444,12 @@ export interface AdminUserDetail {
     principal: string
     totalAccrued: string
     status: SubscriptionStatus
+    startedAt: string
     endsAt: string
+    dailyPayout: string
+    paidPeriods: number
+    totalPeriods: number
+    nextPayoutAt: string | null
   }>
   recentTransactions: Array<{
     id: string

@@ -9,13 +9,13 @@ import theme from "@/app/bowline-theme.module.css"
 import {
   ChevronDown,
   LogOut,
-  Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
   User,
 } from "lucide-react"
 
+import { Logo } from "@/components/logo"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useToast } from "@/components/ui/toast"
 import { initials } from "@/lib/format"
@@ -25,12 +25,13 @@ import { cn } from "@/lib/utils"
 /** Topbar for the signed-in user and admin shells. */
 export function Topbar({
   title,
-  onOpenMenu,
+  homeHref,
   collapsed,
   onToggleSidebar,
 }: {
   title: string
-  onOpenMenu: () => void
+  /** Where the logo goes on small screens, where it stands in for the sidebar. */
+  homeHref: string
   collapsed: boolean
   onToggleSidebar: () => void
 }) {
@@ -57,17 +58,16 @@ export function Topbar({
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-secondary-200 bg-white/90 px-4 backdrop-blur-md sm:px-6 lg:px-8">
-      <button
-        type="button"
-        onClick={onOpenMenu}
-        aria-label="Open navigation"
-        className="-ml-1 rounded-lg p-2 text-secondary-600 transition-colors hover:bg-secondary-100 hover:text-secondary-900 focus-visible:ring-4 focus-visible:ring-primary-200 focus-visible:outline-none lg:hidden"
+      <Link
+        href={homeHref}
+        aria-label="Home"
+        className="-ml-1 rounded-lg focus-visible:ring-4 focus-visible:ring-primary-200 focus-visible:outline-none lg:hidden"
       >
-        <Menu className="size-5" />
-      </button>
+        <Logo showWordmark={false} className="size-8" />
+      </Link>
 
       {/*
-        Desktop counterpart to the hamburger, in the same slot. Both the label
+        Desktop counterpart to the logo link, in the same slot. Both the label
         and the icon flip with the state so the control reads correctly whether
         the rail is open or shut.
       */}
@@ -116,7 +116,10 @@ export function Topbar({
             <DropdownMenu.Content
               align="end"
               sideOffset={8}
-              className={cn(theme.bowline, "z-50 w-60 rounded-xl border border-secondary-200 bg-white p-1.5 shadow-xl shadow-primary-950/10")}
+              className={cn(
+                theme.bowline,
+                "z-50 w-60 rounded-xl border border-secondary-200 bg-white p-1.5 shadow-xl shadow-primary-950/10"
+              )}
             >
               <div className="border-b border-secondary-100 px-3 py-2.5">
                 <p className="truncate text-sm font-semibold text-secondary-900">

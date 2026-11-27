@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import {
   ArrowDownLeft,
@@ -9,7 +9,6 @@ import {
   ArrowUpFromLine,
   ArrowUpRight,
   ChartNoAxesCombined,
-  Clock,
   Coins,
   Layers,
   Lock,
@@ -23,6 +22,7 @@ import { AreaChart } from "@/components/app/area-chart"
 import { ErrorState } from "@/components/app/empty-state"
 import { Money } from "@/components/app/money"
 import { StatusBadge } from "@/components/app/status-badge"
+import { SubscriptionCard } from "@/components/plans/subscription-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/components/providers/auth-provider"
@@ -43,6 +43,7 @@ import {
   isZero,
 } from "@/lib/format"
 import { useAsyncData } from "@/lib/use-async-data"
+import { useNow } from "@/lib/use-now"
 import { cn } from "@/lib/utils"
 
 const PERIODS: Array<{ value: PerformancePeriod; label: string }> = [
@@ -474,25 +475,6 @@ function ReservedNotice({ summary }: { summary: PortfolioSummary }) {
 
 /* ------------------------------------------------------------ active plans */
 
-/** Re-renders on an interval so countdowns stay current. */
-function useNow(intervalMs: number) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs)
-    return () => clearInterval(id)
-  }, [intervalMs])
-  return now
-}
-
-function countdown(target: string, now: number): string | null {
-  const ms = new Date(target).getTime() - now
-  if (ms <= 0) return null
-  const hours = Math.floor(ms / 3_600_000)
-  const minutes = Math.floor((ms % 3_600_000) / 60_000)
-  if (hours > 0) return `${hours}h ${minutes}m`
-  return minutes > 0 ? `${minutes}m` : "under a minute"
-}
-
 function ActivePlans({
   plans,
   loading,
@@ -556,77 +538,11 @@ function ActivePlans({
       ) : (
         <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {plans.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} now={now} />
+            <SubscriptionCard key={plan.id} subscription={plan} now={now} />
           ))}
         </ul>
       )}
     </section>
-  )
-}
-
-function PlanCard({ plan, now }: { plan: Subscription; now: number }) {
-  const progress = plan.totalPeriods > 0 ? (plan.paidPeriods / plan.totalPeriods) * 100 : 0
-  const next = plan.nextPayoutAt ? countdown(plan.nextPayoutAt, now) : null
-
-  return (
-    <li className="flex flex-col rounded-2xl border border-secondary-200 bg-white p-4 transition-colors hover:border-primary-200">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-semibold">{plan.plan.name}</p>
-          <p className="text-xs text-secondary-500">
-            Started {formatDate(plan.startedAt)}
-          </p>
-        </div>
-        <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100 tabular-nums">
-          {formatPercent(plan.plan.dailyReturnPercent)} daily
-        </span>
-      </div>
-
-      <dl className="mt-4 grid grid-cols-2 gap-3">
-        <div>
-          <dt className="text-[11px] text-secondary-500">Principal</dt>
-          <dd className="text-sm font-semibold tabular-nums">{formatMoney(plan.principal)}</dd>
-        </div>
-        <div>
-          <dt className="text-[11px] text-secondary-500">Earned so far</dt>
-          <dd className="text-sm font-semibold text-emerald-600 tabular-nums">
-            {formatMoney(plan.totalAccrued, { showPlus: true })}
-          </dd>
-        </div>
-      </dl>
-
-      <div className="mt-4">
-        <div className="flex justify-between text-[11px] text-secondary-500 tabular-nums">
-          <span>
-            Day {plan.paidPeriods} of {plan.totalPeriods}
-          </span>
-          <span>Ends {formatDate(plan.endsAt)}</span>
-        </div>
-        <div
-          role="progressbar"
-          aria-label={`${plan.plan.name} term`}
-          aria-valuemin={0}
-          aria-valuemax={plan.totalPeriods}
-          aria-valuenow={plan.paidPeriods}
-          className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-secondary-100"
-        >
-          <div
-            className="h-full rounded-full bg-linear-to-r from-primary-500 to-primary-700"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-
-      {plan.nextPayoutAt && (
-        <p className="mt-4 flex items-center gap-1.5 border-t border-secondary-100 pt-3 text-xs text-secondary-600">
-          <Clock aria-hidden className="size-3.5 text-primary-600" />
-          <span className="font-semibold text-secondary-900 tabular-nums">
-            {formatMoney(plan.dailyPayout, { showPlus: true })}
-          </span>
-          {next ? <>in {next}</> : <>being credited now</>}
-        </p>
-      )}
-    </li>
   )
 }
 

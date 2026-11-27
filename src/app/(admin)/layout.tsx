@@ -1,4 +1,9 @@
+import type { Viewport } from "next"
+
 import { AppShell } from "@/components/app/app-shell"
+
+/** Lets the bottom tab bar clear the iPhone home indicator; see the app layout. */
+export const viewport: Viewport = { viewportFit: "cover" }
 
 /**
  * The admin panel renders through the same shell as the user app, with the

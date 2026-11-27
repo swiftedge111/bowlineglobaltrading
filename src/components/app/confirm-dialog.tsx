@@ -3,6 +3,7 @@
 import { AlertDialog } from "radix-ui"
 import { AlertTriangle } from "lucide-react"
 
+import theme from "@/app/bowline-theme.module.css"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -35,9 +36,14 @@ export function ConfirmDialog({
   return (
     <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="fixed inset-0 z-50 bg-secondary-900/50 backdrop-blur-sm" />
+        <AlertDialog.Overlay className="fixed inset-0 z-50 bg-[#092739]/55 backdrop-blur-sm" />
         <AlertDialog.Content
-          className="fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-secondary-200 bg-white p-6 shadow-2xl outline-none"
+          // Portalled to <body>, outside the themed shell, so it carries the
+          // Bowline palette itself.
+          className={cn(
+            theme.bowline,
+            "fixed top-1/2 left-1/2 z-50 max-h-[calc(100svh-2rem)] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.5rem] border border-secondary-200 bg-white p-6 text-secondary-900 shadow-2xl shadow-primary-950/20 outline-none sm:p-7"
+          )}
           onEscapeKeyDown={(event) => {
             // Escaping mid-request would leave the user unsure whether it ran.
             if (busy) event.preventDefault()
@@ -50,7 +56,7 @@ export function ConfirmDialog({
               </span>
             )}
             <div className="min-w-0 flex-1">
-              <AlertDialog.Title className="font-heading text-lg font-bold text-secondary-900">
+              <AlertDialog.Title className="text-xl font-semibold tracking-tight text-secondary-900">
                 {title}
               </AlertDialog.Title>
               {description && (
