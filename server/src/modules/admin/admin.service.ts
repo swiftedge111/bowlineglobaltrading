@@ -1,6 +1,8 @@
 import {
   type Prisma,
   RequestStatus,
+  Role,
+  SubscriptionStatus,
   TxCategory,
   TxStatus,
   TxType,
@@ -33,18 +35,33 @@ import {
   getBalanceSnapshot,
   type Db,
 } from "../../services/ledger.service.js"
+import { serializeSubscription } from "../plans/plans.service.js"
 
 /** Admin operations exposed through routes gated by requireAdmin. */
+
+export const USER_SORTS = ["newest", "oldest", "lastSeen", "name"] as const
+export type UserSort = (typeof USER_SORTS)[number]
+
+const userOrder: Record<UserSort, Prisma.UserOrderByWithRelationInput[]> = {
+  newest: [{ createdAt: "desc" }, { id: "desc" }],
+  oldest: [{ createdAt: "asc" }, { id: "asc" }],
+  // Never-seen accounts sink to the bottom rather than leading the list.
+  lastSeen: [{ lastLoginAt: { sort: "desc", nulls: "last" } }, { id: "desc" }],
+  name: [{ fullName: "asc" }, { id: "asc" }],
+}
 
 export async function listUsers(params: {
   pagination: Pagination
   search?: string | undefined
   status?: UserStatus | undefined
+  role?: Role | undefined
+  sort?: UserSort | undefined
 }) {
   const search = params.search?.trim()
 
   const where: Prisma.UserWhereInput = {
     ...(params.status ? { status: params.status } : {}),
+    ...(params.role ? { role: params.role } : {}),
     ...(search
       ? {
           OR: [
@@ -61,7 +78,7 @@ export async function listUsers(params: {
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: userOrder[params.sort ?? "newest"],
       ...toSkipTake(params.pagination),
     }),
     prisma.user.count({ where }),
@@ -79,6 +96,17 @@ export async function listUsers(params: {
         _sum: { amount: true },
       })
     : []
+
+  const planSums = ids.length
+    ? await prisma.subscription.groupBy({
+        by: ["userId"],
+        where: { userId: { in: ids }, status: SubscriptionStatus.ACTIVE },
+        _sum: { principal: true },
+      })
+    : []
+  const inPlans = new Map(
+    planSums.map((row) => [row.userId, serialize(round2(row._sum.principal ?? ZERO))])
+  )
 
   const balances = new Map<string, { balance: string; available: string }>()
   for (const id of ids) {
@@ -115,11 +143,29 @@ export async function listUsers(params: {
       status: user.status,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
+      emailVerified: user.emailVerifiedAt !== null,
       balance: balances.get(user.id)?.balance ?? "0.00",
       available: balances.get(user.id)?.available ?? "0.00",
+      inPlans: inPlans.get(user.id) ?? "0.00",
     })),
     total,
   }
+}
+
+/** Counts behind the Users screen tabs. Clients only, except `admins`. */
+export async function getUserCounts(now = new Date()) {
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const client = { role: Role.USER }
+  const [clients, active, suspended, unverified, newThisWeek, admins] =
+    await Promise.all([
+      prisma.user.count({ where: client }),
+      prisma.user.count({ where: { ...client, status: UserStatus.ACTIVE } }),
+      prisma.user.count({ where: { ...client, status: UserStatus.SUSPENDED } }),
+      prisma.user.count({ where: { ...client, emailVerifiedAt: null } }),
+      prisma.user.count({ where: { ...client, createdAt: { gte: weekAgo } } }),
+      prisma.user.count({ where: { role: Role.ADMIN } }),
+    ])
+  return { clients, active, suspended, unverified, newThisWeek, admins }
 }
 
 export async function getUserDetail(uid: string) {
@@ -133,14 +179,54 @@ export async function getUserDetail(uid: string) {
 
   if (!user) throw new NotFoundError("User")
 
-  const [snapshot, recentTransactions] = await Promise.all([
-    getBalanceSnapshot(user.id),
-    prisma.transaction.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-  ])
+  const [snapshot, recentTransactions, lifetime, pendingDeposits, pendingWithdrawals] =
+    await Promise.all([
+      getBalanceSnapshot(user.id),
+      prisma.transaction.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      prisma.transaction.groupBy({
+        by: ["category", "type"],
+        where: { userId: user.id, status: TxStatus.COMPLETED },
+        _sum: { amount: true },
+      }),
+      prisma.depositRequest.findMany({
+        where: { userId: user.id, status: RequestStatus.PENDING },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, amount: true, method: true, createdAt: true },
+      }),
+      prisma.withdrawalRequest.findMany({
+        where: { userId: user.id, status: RequestStatus.PENDING },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, amount: true, feeAmount: true, method: true, createdAt: true },
+      }),
+    ])
+
+  // Net of reversals: an admin debit against a category undoes its credit.
+  const net = (...categories: TxCategory[]) =>
+    lifetime
+      .filter((row) => categories.includes(row.category))
+      .reduce(
+        (sum, row) =>
+          row.type === TxType.CREDIT
+            ? sum.add(row._sum.amount ?? ZERO)
+            : sum.sub(row._sum.amount ?? ZERO),
+        ZERO
+      )
+  const withdrawn = lifetime
+    .filter((row) => row.category === TxCategory.WITHDRAWAL)
+    .reduce(
+      (sum, row) =>
+        row.type === TxType.DEBIT
+          ? sum.add(row._sum.amount ?? ZERO)
+          : sum.sub(row._sum.amount ?? ZERO),
+      ZERO
+    )
+  const inPlans = user.subscriptions
+    .filter((subscription) => subscription.status === SubscriptionStatus.ACTIVE)
+    .reduce((sum, subscription) => sum.add(subscription.principal), ZERO)
 
   return {
     user: {
@@ -150,6 +236,11 @@ export async function getUserDetail(uid: string) {
       username: user.username,
       fullName: user.fullName,
       phone: user.phone,
+      contactPhone: user.contactPhone,
+      country: user.country,
+      signupIp: user.signupIp,
+      signupCountry: user.signupCountry,
+      emailVerified: user.emailVerifiedAt !== null,
       role: user.role,
       status: user.status,
       lastLoginAt: user.lastLoginAt,
@@ -160,16 +251,47 @@ export async function getUserDetail(uid: string) {
       balance: serialize(snapshot.balance),
       available: serialize(snapshot.available),
       reserved: serialize(snapshot.reserved),
+      inPlans: serialize(round2(inPlans)),
+      accountValue: serialize(round2(snapshot.balance.add(inPlans))),
+    },
+    lifetime: {
+      deposited: serialize(round2(net(TxCategory.DEPOSIT, TxCategory.HOLDING))),
+      /** What left the account, fees included. */
+      withdrawn: serialize(round2(withdrawn)),
+      earned: serialize(round2(net(TxCategory.PLAN_PAYOUT, TxCategory.PROFIT))),
+    },
+    pending: {
+      deposits: pendingDeposits.map((request) => ({
+        id: request.id,
+        amount: serialize(request.amount),
+        method: request.method,
+        createdAt: request.createdAt,
+      })),
+      withdrawals: pendingWithdrawals.map((request) => ({
+        id: request.id,
+        amount: serialize(request.amount),
+        fee: serialize(request.feeAmount),
+        method: request.method,
+        createdAt: request.createdAt,
+      })),
     },
     holdings: user.holdings.map(serializeHolding),
-    subscriptions: user.subscriptions.map((subscription) => ({
-      id: subscription.id,
-      planName: subscription.plan.name,
-      principal: serialize(subscription.principal),
-      totalAccrued: serialize(subscription.totalAccrued),
-      status: subscription.status,
-      endsAt: subscription.endsAt,
-    })),
+    subscriptions: user.subscriptions.map((subscription) => {
+      const view = serializeSubscription(subscription)
+      return {
+        id: view.id,
+        planName: subscription.plan.name,
+        principal: view.principal,
+        totalAccrued: view.totalAccrued,
+        status: view.status,
+        startedAt: view.startedAt,
+        endsAt: view.endsAt,
+        dailyPayout: view.dailyPayout,
+        paidPeriods: view.paidPeriods,
+        totalPeriods: view.totalPeriods,
+        nextPayoutAt: view.nextPayoutAt,
+      }
+    }),
     recentTransactions: recentTransactions.map((tx) => ({
       id: tx.id,
       type: tx.type,
@@ -618,46 +740,141 @@ export async function listAuditLogs(pagination: Pagination) {
   return { items, total }
 }
 
-export async function getStats() {
+const STATS_DAYS = 30
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * The operator's view of the platform.
+ *
+ * Client liability is what the platform owes clients: their cash balances plus
+ * the principal locked in active plans. Principal moving into a plan is a debit
+ * on the ledger but is still owed, so it is added back.
+ *
+ * Flows are real money in and out, by kind, over the last 30 days. Internal
+ * transfers (plan principal in and out) are left out, since they move nothing.
+ */
+export async function getStats(now = new Date()) {
+  const since = new Date(now.getTime() - STATS_DAYS * DAY_MS)
+  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const weekAhead = new Date(now.getTime() + 7 * DAY_MS)
+
+  const settled = { status: TxStatus.COMPLETED }
+  const sum = (where: Prisma.TransactionWhereInput) =>
+    prisma.transaction.aggregate({ where, _sum: { amount: true }, _count: { _all: true } })
+
   const [
     userCount,
     activeUsers,
+    newToday,
+    newWeek,
     pendingDeposits,
     pendingWithdrawals,
     credited,
     debited,
     reserved,
+    activePlans,
+    maturing,
+    depositsIn,
+    withdrawalsOut,
+    returnsPaid,
+    series,
   ] = await Promise.all([
     prisma.user.count({ where: { role: "USER" } }),
     prisma.user.count({ where: { role: "USER", status: UserStatus.ACTIVE } }),
-    prisma.depositRequest.count({ where: { status: RequestStatus.PENDING } }),
-    prisma.withdrawalRequest.count({ where: { status: RequestStatus.PENDING } }),
-    prisma.transaction.aggregate({
-      where: { type: TxType.CREDIT, status: TxStatus.COMPLETED },
+    prisma.user.count({ where: { role: "USER", createdAt: { gte: dayStart } } }),
+    prisma.user.count({ where: { role: "USER", createdAt: { gte: new Date(now.getTime() - 7 * DAY_MS) } } }),
+    prisma.depositRequest.aggregate({
+      where: { status: RequestStatus.PENDING },
       _sum: { amount: true },
+      _count: { _all: true },
     }),
-    prisma.transaction.aggregate({
-      where: { type: TxType.DEBIT, status: TxStatus.COMPLETED },
+    prisma.withdrawalRequest.aggregate({
+      where: { status: RequestStatus.PENDING },
       _sum: { amount: true },
+      _count: { _all: true },
     }),
-    prisma.transaction.aggregate({
-      where: { type: TxType.DEBIT, status: TxStatus.PENDING },
-      _sum: { amount: true },
+    sum({ ...settled, type: TxType.CREDIT }),
+    sum({ ...settled, type: TxType.DEBIT }),
+    sum({ type: TxType.DEBIT, status: TxStatus.PENDING }),
+    prisma.subscription.aggregate({
+      where: { status: SubscriptionStatus.ACTIVE },
+      _sum: { principal: true },
+      _count: { _all: true },
     }),
+    prisma.subscription.aggregate({
+      where: { status: SubscriptionStatus.ACTIVE, endsAt: { lte: weekAhead } },
+      _sum: { principal: true },
+      _count: { _all: true },
+    }),
+    sum({ ...settled, category: TxCategory.DEPOSIT, createdAt: { gte: since } }),
+    sum({ ...settled, category: TxCategory.WITHDRAWAL, createdAt: { gte: since } }),
+    sum({
+      ...settled,
+      category: { in: [TxCategory.PLAN_PAYOUT, TxCategory.PROFIT] },
+      createdAt: { gte: since },
+    }),
+    // Daily deposits and withdrawals for the chart, in UTC days.
+    prisma.$queryRaw<Array<{ day: Date; deposits: Prisma.Decimal | null; withdrawals: Prisma.Decimal | null }>>`
+      SELECT date_trunc('day', "createdAt" AT TIME ZONE 'UTC') AS day,
+             SUM(CASE WHEN category = 'DEPOSIT' THEN amount END) AS deposits,
+             SUM(CASE WHEN category = 'WITHDRAWAL' THEN amount END) AS withdrawals
+      FROM transactions
+      WHERE status = 'COMPLETED'
+        AND category IN ('DEPOSIT', 'WITHDRAWAL')
+        AND "createdAt" >= ${since}
+      GROUP BY 1
+    `,
   ])
 
   const totalCredited = credited._sum.amount ?? ZERO
   const totalDebited = debited._sum.amount ?? ZERO
+  const cash = round2(totalCredited.sub(totalDebited))
+  const inPlans = activePlans._sum.principal ?? ZERO
+
+  const byDay = new Map(
+    series.map((row) => [row.day.toISOString().slice(0, 10), row])
+  )
+  const days = Array.from({ length: STATS_DAYS }, (_, index) => {
+    const date = new Date(dayStart.getTime() - (STATS_DAYS - 1 - index) * DAY_MS)
+    const key = date.toISOString().slice(0, 10)
+    const row = byDay.get(key)
+    return {
+      date: key,
+      deposits: serialize(row?.deposits ?? ZERO),
+      withdrawals: serialize(row?.withdrawals ?? ZERO),
+    }
+  })
 
   return {
-    users: { total: userCount, active: activeUsers },
-    queues: { pendingDeposits, pendingWithdrawals },
+    users: { total: userCount, active: activeUsers, newToday, newThisWeek: newWeek },
+    queues: {
+      pendingDeposits: pendingDeposits._count._all,
+      pendingDepositsAmount: serialize(pendingDeposits._sum.amount ?? ZERO),
+      pendingWithdrawals: pendingWithdrawals._count._all,
+      pendingWithdrawalsAmount: serialize(pendingWithdrawals._sum.amount ?? ZERO),
+    },
     ledger: {
       totalCredited: serialize(totalCredited),
       totalDebited: serialize(totalDebited),
-      /** Platform-wide liability to clients. */
-      clientLiability: serialize(round2(totalCredited.sub(totalDebited))),
+      /** Cash balances plus principal in active plans. */
+      clientLiability: serialize(round2(cash.add(inPlans))),
+      clientCash: serialize(cash),
+      inPlans: serialize(inPlans),
       reserved: serialize(reserved._sum.amount ?? ZERO),
+    },
+    plans: {
+      active: activePlans._count._all,
+      maturingThisWeek: maturing._count._all,
+      maturingPrincipal: serialize(maturing._sum.principal ?? ZERO),
+    },
+    flows: {
+      days: STATS_DAYS,
+      deposits: serialize(depositsIn._sum.amount ?? ZERO),
+      depositCount: depositsIn._count._all,
+      withdrawals: serialize(withdrawalsOut._sum.amount ?? ZERO),
+      withdrawalCount: withdrawalsOut._count._all,
+      returnsPaid: serialize(returnsPaid._sum.amount ?? ZERO),
+      series: days,
     },
   }
 }

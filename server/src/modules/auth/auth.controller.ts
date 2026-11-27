@@ -1,7 +1,7 @@
 import type { Request, Response } from "express"
 
 import { REFRESH_COOKIE } from "../../config/constants.js"
-import { UnauthenticatedError } from "../../lib/errors.js"
+import { NotFoundError, UnauthenticatedError } from "../../lib/errors.js"
 import { clientIp, created, noContent, ok } from "../../lib/http.js"
 import { prisma } from "../../lib/prisma.js"
 import * as authService from "./auth.service.js"
@@ -78,6 +78,20 @@ export async function logout(req: Request, res: Response): Promise<void> {
     await tokenService.revokeRefreshSession(token)
   }
   tokenService.clearRefreshCookie(res)
+  noContent(res)
+}
+
+export async function listSessions(req: Request, res: Response): Promise<void> {
+  const token = req.cookies?.[REFRESH_COOKIE] as string | undefined
+  ok(res, { sessions: await tokenService.listSessions(req.auth!.userId, token) })
+}
+
+export async function revokeSession(req: Request, res: Response): Promise<void> {
+  const revoked = await tokenService.revokeSessionById(
+    req.auth!.userId,
+    String(req.params.id)
+  )
+  if (!revoked) throw new NotFoundError("Session")
   noContent(res)
 }
 

@@ -87,3 +87,8 @@ authRouter.post(
 )
 
 authRouter.get("/me", authenticate, asyncHandler(controller.me))
+
+// Under /auth because the refresh cookie is scoped to this path, and the list
+// needs it to mark which session is the one making the request.
+authRouter.get("/sessions", authenticate, asyncHandler(controller.listSessions))
+authRouter.delete("/sessions/:id", authenticate, asyncHandler(controller.revokeSession))

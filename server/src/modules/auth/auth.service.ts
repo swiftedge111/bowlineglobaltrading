@@ -46,6 +46,9 @@ export interface PublicUser {
   phone: string | null
   /** ISO 3166-1 alpha-2. Same. */
   country: string | null
+  /** E.164 WhatsApp / Telegram number. Same. */
+  contactPhone: string | null
+  emailVerified: boolean
   role: User["role"]
   status: UserStatus
   createdAt: Date
@@ -61,6 +64,8 @@ export function toPublicUser(user: User): PublicUser {
     fullName: user.fullName,
     phone: user.phone,
     country: user.country,
+    contactPhone: user.contactPhone,
+    emailVerified: user.emailVerifiedAt !== null,
     role: user.role,
     status: user.status,
     createdAt: user.createdAt,

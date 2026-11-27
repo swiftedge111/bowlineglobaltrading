@@ -112,6 +112,42 @@ export async function revokeRefreshSession(token: string): Promise<void> {
   })
 }
 
+/**
+ * A user's live sessions, newest first.
+ *
+ * Every refresh rotates the session into a new row, so `createdAt` is when
+ * that device last refreshed: in practice, when it was last active. `current`
+ * marks the session whose cookie came with this request.
+ */
+export async function listSessions(userId: string, currentToken?: string) {
+  const currentHash = currentToken ? hashToken(currentToken) : null
+  const sessions = await prisma.refreshSession.findMany({
+    where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  })
+
+  return sessions.map((session) => ({
+    id: session.id,
+    userAgent: session.userAgent,
+    ip: session.ip,
+    lastActiveAt: session.createdAt,
+    expiresAt: session.expiresAt,
+    persistent: session.persistent,
+    current: session.tokenHash === currentHash,
+  }))
+}
+
+/** Signs one of the user's own sessions out. Returns false if there was none. */
+export async function revokeSessionById(userId: string, id: string): Promise<boolean> {
+  const result = await prisma.refreshSession.updateMany({
+    // Scoped to the user, so one account can never revoke another's session.
+    where: { id, userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  })
+  return result.count > 0
+}
+
 /** Used on password change/reset — signs every device out. */
 export async function revokeAllSessions(userId: string): Promise<void> {
   await prisma.refreshSession.updateMany({

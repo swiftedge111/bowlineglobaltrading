@@ -1,6 +1,7 @@
 import {
   DepositMethod,
   RequestStatus,
+  Role,
   SubscriptionStatus,
   TxCategory,
   UserStatus,
@@ -72,6 +73,8 @@ adminRouter.get(
     query: paginationSchema.extend({
       search: z.string().trim().max(120).optional(),
       status: z.enum(UserStatus).optional(),
+      role: z.enum(Role).optional(),
+      sort: z.enum(service.USER_SORTS).optional(),
     }),
   }),
   asyncHandler(async (req, res) => {
@@ -80,15 +83,27 @@ adminRouter.get(
       limit: number
       search?: string
       status?: UserStatus
+      role?: Role
+      sort?: service.UserSort
     }
 
     const { items, total } = await service.listUsers({
       pagination: { page: query.page, limit: query.limit },
       search: query.search,
       status: query.status,
+      role: query.role,
+      sort: query.sort,
     })
 
     paginated(res, items, buildPageMeta(query.page, query.limit, total))
+  })
+)
+
+// Registered before `/users/:uid` so "summary" is not read as a UID.
+adminRouter.get(
+  "/users/summary",
+  asyncHandler(async (_req, res) => {
+    ok(res, await service.getUserCounts())
   })
 )
 
