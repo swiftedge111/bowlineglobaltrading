@@ -1,13 +1,14 @@
 import type { Metadata } from "next"
-import { company } from "@/lib/site"
 
 import { TransactionsScreen } from "@/components/transactions/transactions-screen"
+import { pageSeo } from "@/lib/seo"
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageSeo({
   title: "Transactions",
-  description: `Your ${company.name} transaction history.`,
+  description: "Sign in to review your transaction history and track payment updates.",
+  path: "/transactions",
   robots: { index: false, follow: false },
-}
+})
 
 export default function TransactionsPage() {
   return <TransactionsScreen />

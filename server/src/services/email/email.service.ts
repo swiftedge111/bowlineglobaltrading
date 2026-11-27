@@ -25,7 +25,7 @@ async function send(to: string, email: Email): Promise<void> {
     to,
     subject: email.subject,
     html: email.html,
-    text: email.text,
+    text: `${email.text.trimEnd()}\n\nNeed help with your account? Contact support at ${env.SUPPORT_EMAIL}`,
   })
 
   if (error) {

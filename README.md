@@ -32,6 +32,8 @@ See [backend testing](server/README.md#testing) for running the PostgreSQL integ
 
 ## Deployment settings
 
-Set `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_API_URL` to the new public origins before building. Include `/api/v1` in the API URL. Public support email, phone, office address, and Smartsupp are optional. Their settings are listed in [.env.example](.env.example).
+Set `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_API_URL` to the new public origins before building. Include `/api/v1` in the API URL. Optional public contact settings are listed in [.env.example](.env.example).
+
+To enable customer live chat, set `NEXT_PUBLIC_SMARTSUPP_KEY` in Vercel's project environment variables and redeploy. The chat widget uses this public key in the browser.
 
 Set the API's `APP_URL` and `CORS_ORIGINS` to the frontend origin, and use the new database and service credentials in [server/.env.example](server/.env.example). Keep local environment files and generated output outside the initial source commit.

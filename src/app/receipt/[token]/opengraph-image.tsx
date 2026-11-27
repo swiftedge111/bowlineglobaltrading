@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { API_BASE_URL } from "@/lib/api/base-url"
 import { company } from "@/lib/site"
 
-export const alt = `${company.name} payment receipt`
+export const alt = `Payment receipt with the white ${company.name} logo`
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
@@ -44,7 +44,7 @@ export default async function Image({
   const { token } = await params
   const [reference, logo] = await Promise.all([
     loadReference(token),
-    readFile(join(process.cwd(), "public/brand/bowline-logo-reversed-640.png")),
+    readFile(join(process.cwd(), "public/brand/bowline-logo-white-640.png")),
   ])
 
   return new ImageResponse(
@@ -57,7 +57,7 @@ export default async function Image({
           flexDirection: "column",
           justifyContent: "center",
           padding: "0 96px",
-          background: "#0f172a",
+          background: "#092739",
           color: "#ffffff",
           fontFamily: "sans-serif",
         }}
@@ -76,7 +76,7 @@ export default async function Image({
             fontSize: 22,
             letterSpacing: 6,
             textTransform: "uppercase",
-            color: "#60a5fa",
+            color: "#b8d8e7",
             fontWeight: 700,
           }}
         >
@@ -91,12 +91,14 @@ export default async function Image({
             letterSpacing: -2,
           }}
         >
-          {reference ?? "Transaction receipt"}
+          {reference ?? "Receipt unavailable"}
         </div>
 
-        <div style={{ marginTop: 26, fontSize: 28, color: "#94a3b8" }}>
-          Official confirmation of a completed transaction. Tap to view.
-        </div>
+        {reference && (
+          <div style={{ marginTop: 26, fontSize: 28, color: "#c6dce5" }}>
+            View the receipt for this completed transaction.
+          </div>
+        )}
       </div>
     ),
     size

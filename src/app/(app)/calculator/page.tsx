@@ -1,12 +1,14 @@
 import type { Metadata } from "next"
 
 import { CalculatorScreen } from "@/components/calculator/calculator-screen"
+import { pageSeo } from "@/lib/seo"
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageSeo({
   title: "Calculator",
-  description: "Project returns at a fixed daily rate.",
+  description: "Estimate projected returns using an amount, a daily rate, and a plan term.",
+  path: "/calculator",
   robots: { index: false, follow: false },
-}
+})
 
 export default function CalculatorPage() {
   return <CalculatorScreen />

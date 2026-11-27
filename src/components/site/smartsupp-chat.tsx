@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation"
 import Script from "next/script"
 
 /** Public by design — it ships in the page to every visitor. */
-const SMARTSUPP_KEY = process.env.NEXT_PUBLIC_SMARTSUPP_KEY
+const SMARTSUPP_KEY = process.env.NEXT_PUBLIC_SMARTSUPP_KEY?.trim()
 
 /**
  * Where the chat box stays hidden: the admin panel, which is staff answering
@@ -46,8 +46,9 @@ export function SmartsuppChat() {
   // "smartsupp": an element id becomes a window global, and the snippet's
   // `window.smartsupp||` guard would then see it and skip loading.
   return (
-    <Script id="smartsupp-embed" strategy="lazyOnload">
-      {`var _smartsupp = _smartsupp || {};
+    <>
+      <Script id="smartsupp-embed" strategy="afterInteractive">
+        {`var _smartsupp = _smartsupp || {};
 _smartsupp.key = ${JSON.stringify(SMARTSUPP_KEY)};
 window.smartsupp||(function(d) {
   var s,c,o=smartsupp=function(){ o._.push(arguments)};o._=[];
@@ -55,6 +56,13 @@ window.smartsupp||(function(d) {
   c.type='text/javascript';c.charset='utf-8';c.async=true;
   c.src='https://www.smartsuppchat.com/loader.js?';s.parentNode.insertBefore(c,s);
 })(document);`}
-    </Script>
+      </Script>
+      <noscript>
+        Powered by{" "}
+        <a href="https://www.smartsupp.com" target="_blank" rel="noreferrer">
+          Smartsupp
+        </a>
+      </noscript>
+    </>
   )
 }

@@ -6,13 +6,14 @@ import { company } from "@/lib/site"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { VerifyEmailForm } from "@/components/auth/verify-email-form"
 import { Skeleton } from "@/components/ui/skeleton"
+import { pageSeo } from "@/lib/seo"
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageSeo({
   title: "Confirm Your Email",
   description: `Confirm your email address for your ${company.name} account.`,
   // Reachable only via a one-time emailed token.
   robots: { index: false, follow: false },
-}
+})
 
 export default function VerifyEmailPage() {
   return (

@@ -37,7 +37,7 @@ export async function generateMetadata({
     : "Payment receipt"
 
   const description = receipt
-    ? `Official confirmation of a completed transaction, issued by ${company.name}.`
+    ? `View the payment receipt issued by ${company.name} for this completed transaction.`
     : "This receipt is no longer available."
 
   return {

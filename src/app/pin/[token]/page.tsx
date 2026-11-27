@@ -4,28 +4,19 @@ import { notFound } from "next/navigation"
 import { PinReveal } from "@/components/pin/pin-reveal"
 import { API_BASE_URL } from "@/lib/api/base-url"
 import type { PinShare } from "@/lib/api/types"
+import { pageSeo } from "@/lib/seo"
 import { company } from "@/lib/site"
 
 /**
- * The preview a chat app draws for this link.
- *
- * It names the sender and says a PIN is waiting, and stops there — no name, no
- * PIN, nothing that a card sitting in a group chat should be carrying. The
- * generic marketing card would have been worse than useless here: a link that
- * looks like an advert is exactly what a cautious person ignores, and this one
- * needs to be tapped by the person it was sent to.
+ * The preview identifies the sender and the purpose of the link. The recipient
+ * and PIN stay behind the reveal action.
  */
-export const metadata: Metadata = {
-  title: "Your withdrawal PIN",
-  description: `A withdrawal PIN is waiting for you. Open to view it once.`,
+export const metadata: Metadata = pageSeo({
+  title: "Your Withdrawal PIN",
+  description: `Open this link to view your one-time withdrawal PIN from ${company.name}.`,
   robots: { index: false, follow: false, nocache: true },
-  openGraph: {
-    title: "Your withdrawal PIN",
-    description: `A withdrawal PIN is waiting for you. Open to view it once.`,
-    siteName: company.name,
-    type: "article",
-  },
-}
+  type: "article",
+})
 
 /**
  * Fetched with a plain `fetch` rather than the shared API client, which keeps an

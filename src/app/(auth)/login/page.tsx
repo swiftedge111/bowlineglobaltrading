@@ -5,11 +5,10 @@ import { AccountAccess } from "@/components/auth/account-access"
 import { LoginForm } from "@/components/auth/login-form"
 import { Skeleton } from "@/components/ui/skeleton"
 import { pageSeo } from "@/lib/seo"
-import { company } from "@/lib/site"
 
 export const metadata: Metadata = pageSeo({
   title: "Sign In",
-  description: `Sign in to your ${company.name} account to manage your portfolio.`,
+  description: "Sign in to view your portfolio, check transactions, and manage your Bowline account.",
   path: "/login",
 })
 

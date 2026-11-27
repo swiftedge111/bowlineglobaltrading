@@ -7,9 +7,9 @@ import { PasswordRecoveryShell } from "@/components/auth/password-recovery-shell
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form"
 
 export const metadata: Metadata = pageSeo({
-  title: "Reset Password",
+  title: "Reset Your Password",
   description:
-    `Reset the password on your ${company.name} account. We'll email you a secure link.`,
+    `Request an email link to reset your ${company.name} password and get back into your account.`,
   path: "/forgot-password",
 })
 

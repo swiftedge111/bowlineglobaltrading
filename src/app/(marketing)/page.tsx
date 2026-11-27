@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { baseOpenGraph } from "@/lib/seo"
+import { siteSocialMetadata } from "@/lib/seo"
 import { StructuredData } from "@/components/site/structured-data"
 import { Hero } from "@/components/home/hero"
 import { InstrumentDirectory } from "@/components/home/instrument-directory"
@@ -16,15 +16,9 @@ import { Testimonials } from "@/components/home/testimonials"
 import { Faq } from "@/components/home/faq"
 import { Cta } from "@/components/home/cta"
 
-/* Adds the canonical — which is what stops `/`, `/?utm_source=…` and any
-   trailing-slash variant counting as separate pages — plus og:url. The base
-   Open Graph is respread rather than partially overridden, because a bare
-   `openGraph: { url }` here would replace the root's and drop the share image.
-   The title is left alone so it keeps the site default rather than being run
-   through the `%s | …` template twice. */
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
-  openGraph: { ...baseOpenGraph, url: "/" },
+  openGraph: { ...siteSocialMetadata.openGraph, url: "/" },
 }
 
 export default function Home() {

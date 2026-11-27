@@ -4,7 +4,7 @@ import "./globals.css"
 
 import { Providers } from "@/components/providers"
 import { SmartsuppChat } from "@/components/site/smartsupp-chat"
-import { baseOpenGraph, shareImage } from "@/lib/seo"
+import { siteSocialMetadata, siteTitle } from "@/lib/seo"
 import { company } from "@/lib/site"
 
 const inter = Inter({
@@ -28,7 +28,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(company.url),
   title: {
-    default: `${company.name} — ${company.tagline}`,
+    default: siteTitle,
     template: `%s | ${company.name}`,
   },
   description: company.description,
@@ -45,13 +45,7 @@ export const metadata: Metadata = {
   /* Inherited by every route. Deliberately no `alternates.canonical` here —
      metadata is shallow-merged, so a canonical set at the root would tell
      crawlers that every page is a duplicate of it. Canonicals are per page. */
-  openGraph: baseOpenGraph,
-  twitter: {
-    card: "summary_large_image",
-    title: `${company.name} — ${company.tagline}`,
-    description: company.description,
-    images: [shareImage.url],
-  },
+  ...siteSocialMetadata,
   robots: {
     index: true,
     follow: true,

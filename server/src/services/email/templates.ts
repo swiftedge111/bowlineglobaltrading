@@ -9,8 +9,9 @@
  */
 
 const BRAND = "Bowline Global Trading"
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL?.trim()
 
-const PRIMARY = "#2563eb"
+const PRIMARY = "#006ca5"
 const INK = "#0f172a"
 const BODY_TEXT = "#334155"
 const MUTED = "#64748b"
@@ -22,7 +23,8 @@ const SUBTLE = "#f8fafc"
 /**
  * Absolute URL for the logo. Email clients will not load a relative path, and
  * SVG is stripped by Gmail, Outlook and Yahoo — so this must be a hosted PNG.
- * The Next.js app serves the Bowline badge at `public/logo-mark-144.png`.
+ * The Next.js app serves the reversed horizontal Bowline logo at
+ * `public/brand/bowline-logo-reversed-640.png`.
  * `EMAIL_ASSET_BASE_URL` overrides the host if the assets
  * ever move to a CDN or a storage bucket.
  *
@@ -36,20 +38,21 @@ const ASSET_BASE = (
   "http://localhost:3000"
 ).replace(/\/+$/, "")
 
-const LOGO_URL = `${ASSET_BASE}/logo-mark-144.png`
+const LOGO_URL = `${ASSET_BASE}/brand/bowline-logo-reversed-640.png`
 
 /**
- * Accent colour per message type. The header rule, the eyebrow and any status
+ * Accent colour per message type. The header rule and any status
  * chip all read from one tone, so an approval never arrives looking like a
  * rejection because two places were changed independently.
  */
 type Tone = "brand" | "success" | "warn" | "danger" | "neutral"
 
 const TONES: Record<Tone, { accent: string; soft: string; softBorder: string; deep: string }> = {
-  brand: { accent: PRIMARY, soft: "#eff6ff", softBorder: "#bfdbfe", deep: "#1e40af" },
+  brand: { accent: PRIMARY, soft: "#edf8ff", softBorder: "#ade0ff", deep: "#08486a" },
   success: { accent: "#059669", soft: "#ecfdf5", softBorder: "#a7f3d0", deep: "#065f46" },
-  warn: { accent: "#d97706", soft: "#fffbeb", softBorder: "#fde68a", deep: "#92400e" },
-  danger: { accent: "#dc2626", soft: "#fef2f2", softBorder: "#fecaca", deep: "#991b1b" },
+  // Statuses that need attention stay within Bowline's blue palette.
+  warn: { accent: PRIMARY, soft: "#edf8ff", softBorder: "#ade0ff", deep: "#08486a" },
+  danger: { accent: PRIMARY, soft: "#edf8ff", softBorder: "#ade0ff", deep: "#08486a" },
   neutral: { accent: "#475569", soft: SUBTLE, softBorder: BORDER, deep: "#334155" },
 }
 
@@ -127,16 +130,13 @@ const formatDateTime = (date: Date) => `${dateTimeFormat.format(date)} UTC`
  *   single email.
  */
 interface LayoutOptions {
-  /** Small uppercase label above the heading — orients the reader instantly. */
-  eyebrow?: string
   tone?: Tone
 }
 
 /**
  * @param heading Raw HTML, same contract as `paragraph()` — several call sites
  *   interpolate `esc(first)` or `esc(planName)` themselves, so escaping here
- *   too would render "O'Brien" as "O&#39;Brien". `eyebrow` is escaped because
- *   it is always a literal chosen in this file.
+ *   too would render "O'Brien" as "O&#39;Brien".
  */
 function layout(
   heading: string,
@@ -145,10 +145,6 @@ function layout(
   options: LayoutOptions = {}
 ): string {
   const tone = TONES[options.tone ?? "brand"]
-
-  const eyebrow = options.eyebrow
-    ? `<p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${tone.accent};">${esc(options.eyebrow)}</p>`
-    : ""
 
   return `<!doctype html>
 <html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -186,14 +182,11 @@ function layout(
         <!-- Brand bar -->
         <tr>
           <td bgcolor="${INK}" style="background:${INK};border-radius:16px 16px 0 0;padding:22px 32px;">
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td width="40" style="padding-right:12px;">
-                  <img src="${LOGO_URL}" width="40" height="40" alt="${esc(BRAND)}"
-                       style="display:block;width:40px;height:40px;border:0;border-radius:10px;">
-                </td>
-                <td style="vertical-align:middle;">
-                  <span style="color:#ffffff;font-size:17px;font-weight:700;letter-spacing:-0.3px;">${BRAND}</span>
+                <td align="left" style="vertical-align:middle;">
+                  <img src="${LOGO_URL}" width="182" height="50" alt="${esc(BRAND)}"
+                       style="display:block;width:182px;height:auto;max-width:100%;border:0;">
                 </td>
               </tr>
             </table>
@@ -208,7 +201,6 @@ function layout(
         <!-- Content -->
         <tr>
           <td bgcolor="#ffffff" class="sp" style="background:#ffffff;padding:34px 32px 30px;border-left:1px solid ${BORDER};border-right:1px solid ${BORDER};">
-            ${eyebrow}
             <h1 style="margin:0 0 18px;font-size:24px;line-height:1.28;font-weight:700;letter-spacing:-0.4px;color:${INK};">${heading}</h1>
             ${body}
           </td>
@@ -217,12 +209,9 @@ function layout(
         <!-- Footer -->
         <tr>
           <td bgcolor="${SUBTLE}" class="sp" style="background:${SUBTLE};padding:22px 32px 26px;border:1px solid ${BORDER};border-top:0;border-radius:0 0 16px 16px;">
+            ${SUPPORT_EMAIL ? `<p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:${MUTED};">Need help with your account? <a href="mailto:${esc(SUPPORT_EMAIL)}" style="color:${PRIMARY};font-weight:600;text-decoration:none;">Contact support</a></p>` : ""}
             <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:${MUTED};">
-              Sent by <strong style="color:${BODY_TEXT};">${BRAND}</strong>. This is an automated message — replies are not monitored.
-            </p>
-            <p style="margin:0 0 12px;font-size:11.5px;line-height:1.65;color:${FAINT};">
-              Trading carries a high level of risk and you may lose some or all of your invested capital.
-              Past performance is not a reliable indicator of future results.
+              Sent by <strong style="color:${BODY_TEXT};">${BRAND}</strong>. This is an automated message; replies are not monitored.
             </p>
             <p style="margin:0;font-size:11.5px;color:${FAINT};">
               &copy; ${new Date().getFullYear()} ${BRAND}. All rights reserved.
@@ -400,7 +389,7 @@ function panel(rows: Array<[string, string]>, title?: string): string {
  * which has to survive being skim-read.
  */
 function callout(content: string, tone: "warn" | "info" = "info"): string {
-  const palette = tone === "warn" ? TONES.danger : TONES.brand
+  const palette = tone === "warn" ? TONES.warn : TONES.brand
 
   // The 4px left bar survives clients that drop border-radius, so the notice
   // still reads as set apart rather than as an oddly tinted paragraph.
@@ -414,7 +403,7 @@ function callout(content: string, tone: "warn" | "info" = "info"): string {
 
 /**
  * A mailto link. `color` defaults to the brand blue, but links sitting inside a
- * `warn` callout pass its red so the two do not clash.
+ * callouts use the same blue as the surrounding brand palette.
  */
 function mailLink(address: string, color: string = PRIMARY): string {
   return `<a href="mailto:${esc(address)}" style="color:${color};font-weight:600;">${esc(address)}</a>`
@@ -477,7 +466,7 @@ export function welcomeEmail(params: {
           `We'll never email you asking for your password or a withdrawal PIN. If a message asks for either, it isn't from us.`
         ),
       `Your account is open, ${first} — here's how to get started.`,
-      { eyebrow: "Welcome", tone: "brand" }
+      { tone: "brand" }
     ),
     text: `Welcome aboard, ${first}.
 
@@ -512,25 +501,36 @@ export function emailVerificationEmail(params: {
     html: layout(
       "Confirm your email address",
       paragraph(
-        `Hi ${esc(first)}, please confirm this address so we can send you deposit, withdrawal and security notices.`
+        `Hi ${esc(first)}, one quick step remains before your ${BRAND} account is ready. Confirm this email address so we can link it to your profile and send account activity, payment updates and security notices to the right inbox.`
       ) +
         button(params.verifyUrl, "Confirm my email") +
+        sectionTitle("What happens next") +
+        steps([
+          ["Confirm this address", "Use the button above to verify that you can receive email here."],
+          ["Return to your account", "Once confirmed, you can continue using your account and receive important updates here."],
+        ]) +
         paragraph(
-          `This link expires in ${params.ttlMinutes} minutes and can only be used once.`
+          `For your security, this confirmation link expires in ${params.ttlMinutes} minutes and works once. If it expires, request another verification email from the sign-in page.`
         ) +
         paragraph(
-          `If you didn't create a ${BRAND} account, you can safely ignore this email.`
+          `If you didn't create a ${BRAND} account, you can safely ignore this message. Someone with this email cannot sign in to your account using this confirmation link alone.`
         ),
-      "One click to confirm your address and secure your account.",
-      { eyebrow: "Verify your email", tone: "brand" }
+      `Confirm your email address to finish setting up your ${BRAND} account.`,
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
-Confirm your email address for ${BRAND}. This link expires in ${params.ttlMinutes} minutes and can only be used once.
+One quick step remains before your ${BRAND} account is ready. Confirm this email address so we can link it to your profile and send account activity, payment updates and security notices to the right inbox.
 
 ${params.verifyUrl}
 
-If you didn't create an account, ignore this email.`,
+WHAT HAPPENS NEXT
+1. Confirm this address using the link above.
+2. Return to your account and continue using it once confirmed.
+
+For your security, this link expires in ${params.ttlMinutes} minutes and works once. If it expires, request another verification email from the sign-in page.
+
+If you didn't create a ${BRAND} account, ignore this message. Someone with this email cannot sign in to your account using this confirmation link alone.`,
   }
 }
 
@@ -546,25 +546,36 @@ export function passwordResetEmail(params: {
     html: layout(
       "Reset your password",
       paragraph(
-        `Hi ${esc(first)}, we received a request to reset your password.`
+        `Hi ${esc(first)}, we received a request to choose a new password for your ${BRAND} account. Use the secure link below to continue. Your current password remains unchanged until you complete the reset.`
       ) +
         button(params.resetUrl, "Choose a new password") +
+        sectionTitle("Before you continue") +
+        steps([
+          ["Open the secure link", "The link is personal to this request and can only be used once."],
+          ["Choose a new password", "Use a password you do not use for other websites."],
+          ["Sign in again", "After the reset, use your new password the next time you access your account."],
+        ]) +
         paragraph(
-          `This link expires in ${params.ttlMinutes} minutes and can only be used once.`
+          `This link expires in ${params.ttlMinutes} minutes. For your protection, it cannot be used again after the password is reset.`
         ) +
         callout(
-          "If you didn't request this, you can ignore this email — your password will not change, and nobody can reset it without this link."
+          "If you didn't request a password reset, ignore this email. Your password will stay the same unless someone uses this link to complete the reset. If you are concerned, contact support using the details in the footer."
         ),
-      `Reset link inside — valid for ${params.ttlMinutes} minutes.`,
-      { eyebrow: "Security", tone: "warn" }
+      `Use the secure link to reset your password. It expires in ${params.ttlMinutes} minutes.`,
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
-Reset your ${BRAND} password using the link below. It expires in ${params.ttlMinutes} minutes and can only be used once.
+We received a request to choose a new password for your ${BRAND} account. Your current password remains unchanged until you complete the reset.
 
 ${params.resetUrl}
 
-If you didn't request this, ignore this email — your password will not change.`,
+BEFORE YOU CONTINUE
+1. Open the secure link. It is personal to this request and can only be used once.
+2. Choose a password you do not use for other websites.
+3. Sign in with your new password after the reset.
+
+This link expires in ${params.ttlMinutes} minutes. If you didn't request a reset, ignore this email; your password will stay the same unless the link is used.`,
   }
 }
 
@@ -573,27 +584,36 @@ export function passwordChangedEmail(params: {
   supportEmail: string
 }): Email {
   const first = firstNameOf(params.fullName)
-  const mailto = mailLink(params.supportEmail, "#991b1b")
+  const mailto = mailLink(params.supportEmail)
 
   return {
     subject: "Your password was changed",
     html: layout(
       "Your password was changed",
       paragraph(
-        `Hi ${esc(first)}, the password on your ${BRAND} account was just changed and every device has been signed out.`
+        `Hi ${esc(first)}, the password for your ${BRAND} account was changed successfully. For your protection, all other signed-in sessions have been ended. Use your new password the next time you sign in.`
       ) +
+        sectionTitle("If you made this change") +
+        paragraph(
+          "You are all set. Keep your new password private, and avoid reusing a password from another service. We will never ask you to send your password by email or chat."
+        ) +
+        sectionTitle("If you did not make this change") +
         callout(
-          `If this wasn't you, contact us immediately at ${mailto}. Your account may be at risk.`,
+          `Contact our support team at ${mailto} as soon as possible so we can help secure your account. Do not share your password or any verification code with anyone.`,
           "warn"
         ),
-      "Your password was just changed and all devices were signed out.",
-      { eyebrow: "Security", tone: "success" }
+      "Your password was updated. Review this message if you did not make the change.",
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
-The password on your ${BRAND} account was just changed and every device was signed out.
+The password for your ${BRAND} account was changed successfully. All other signed-in sessions have been ended. Use your new password the next time you sign in.
 
-If this wasn't you, contact ${params.supportEmail} immediately.`,
+IF YOU MADE THIS CHANGE
+Keep your new password private, and avoid reusing a password from another service. We will never ask you to send your password by email or chat.
+
+IF YOU DID NOT MAKE THIS CHANGE
+Contact support at ${params.supportEmail} as soon as possible so we can help secure your account. Do not share your password or any verification code with anyone.`,
   }
 }
 
@@ -605,7 +625,7 @@ export function loginAlertEmail(params: {
   supportEmail: string
 }): Email {
   const first = firstNameOf(params.fullName)
-  const mailto = mailLink(params.supportEmail, "#991b1b")
+  const mailto = mailLink(params.supportEmail)
 
   const rows: Array<[string, string]> = [["When", formatDateTime(params.when)]]
   if (params.device) rows.push(["Device", params.device])
@@ -616,23 +636,24 @@ export function loginAlertEmail(params: {
     html: layout(
       "New sign-in to your account",
       paragraph(
-        `Hi ${esc(first)}, your ${BRAND} account was just signed in to from a device we haven't seen before.`
+        `Hi ${esc(first)}, a sign-in to your ${BRAND} account was detected from a device we haven't seen before. Review the details below and check whether this activity was yours.`
       ) +
         panel(rows, "Sign-in details") +
+        sectionTitle("What to do") +
         callout(
-          `If this was you, no action is needed. If it wasn't, change your password now and contact ${mailto}.`,
+          `If you recognize this sign-in, no action is needed. If you do not recognize it, change your password immediately and contact ${mailto}. Do not share a verification code with anyone who contacts you.`,
           "warn"
         ),
-      `Signed in ${formatDateTime(params.when)} from a new device.`,
-      { eyebrow: "Security", tone: "warn" }
+      `Review a new sign-in to your account from ${formatDateTime(params.when)}.`,
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
-Your ${BRAND} account was signed in to from a new device.
+We detected a sign-in to your ${BRAND} account from a device we haven't seen before. Review the details and check whether this activity was yours.
 
 When: ${formatDateTime(params.when)}${params.device ? `\nDevice: ${params.device}` : ""}${params.ipAddress ? `\nIP address: ${params.ipAddress}` : ""}
 
-If this wasn't you, change your password now and contact ${params.supportEmail}.`,
+If you recognize this sign-in, no action is needed. If you do not recognize it, change your password immediately and contact ${params.supportEmail}. Do not share a verification code with anyone who contacts you.`,
   }
 }
 
@@ -649,20 +670,27 @@ export function accountSuspendedEmail(params: {
     html: layout(
       "Your account has been suspended",
       paragraph(
-        `Hi ${esc(first)}, your ${BRAND} account has been suspended. You will not be able to sign in, trade, or request a withdrawal until it is restored.`
+        `Hi ${esc(first)}, access to your ${BRAND} account has been paused. While the suspension is active, you cannot sign in, place trades, or submit withdrawal requests.`
       ) +
+        sectionTitle("Account status") +
         reasonPanel(params.reason) +
         paragraph(
-          `Your balance is unaffected. To resolve this, reply to this email or contact ${mailto}.`
+          "This notice concerns account access and does not itself change your recorded balance. Contact support if you need an update on a pending request."
+        ) +
+        sectionTitle("How to get help") +
+        paragraph(
+          `Contact our support team at ${mailto} for information about the review and any steps needed to restore access. Include your account email and the reason shown above, if one was provided. Please do not send your password or withdrawal PIN.`
         ),
-      "Access is paused. Your balance is unaffected.",
-      { eyebrow: "Account status", tone: "danger" }
+      "Your account access is paused. Contact support for help with the review.",
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
-Your ${BRAND} account has been suspended. You cannot sign in, trade, or request a withdrawal until it is restored.${reasonText(params.reason)}
+Access to your ${BRAND} account has been paused. While the suspension is active, you cannot sign in, place trades, or submit withdrawal requests.${reasonText(params.reason)}
 
-Your balance is unaffected. Contact ${params.supportEmail} to resolve this.`,
+This notice concerns account access and does not itself change your recorded balance. Contact support if you need an update on a pending request.
+
+Contact ${params.supportEmail} for information about the review and any steps needed to restore access. Include your account email and the reason shown above, if provided. Never send your password or withdrawal PIN.`,
   }
 }
 
@@ -677,16 +705,27 @@ export function accountReactivatedEmail(params: {
     html: layout(
       "Your account has been restored",
       paragraph(
-        `Hi ${esc(first)}, the suspension on your ${BRAND} account has been lifted. Full access to trading, deposits and withdrawals is available again.`
-      ) + button(`${params.appUrl}/login`, "Sign in to your account", "success"),
-      "Full access has been restored to your account.",
-      { eyebrow: "Account status", tone: "success" }
+        `Hi ${esc(first)}, the suspension on your ${BRAND} account has been lifted and account access is restored. You can sign in again and use the account features available to you, including deposits, trading and withdrawals.`
+      ) +
+        button(`${params.appUrl}/login`, "Sign in to your account", "success") +
+        sectionTitle("Before you continue") +
+        paragraph(
+          "Review your account activity and confirm that your contact details are current. If you had a request in progress while access was paused, check its status after signing in."
+        ) +
+        callout(
+          "If you do not recognize this account change or cannot sign in, contact support using the details in the footer.",
+          "info"
+        ),
+      "Your account access is restored. Sign in to review your account activity.",
+      { tone: "success" }
     ),
     text: `Hi ${first},
 
-The suspension on your ${BRAND} account has been lifted and full access is available again.
+The suspension on your ${BRAND} account has been lifted and account access is restored. You can sign in again and use the account features available to you, including deposits, trading and withdrawals.
 
-Sign in: ${params.appUrl}/login`,
+Sign in: ${params.appUrl}/login
+
+After signing in, review your account activity and confirm that your contact details are current. If you had a request in progress while access was paused, check its status. If you do not recognize this change or cannot sign in, contact support.`,
   }
 }
 
@@ -710,24 +749,35 @@ export function depositSubmittedEmail(params: {
     html: layout(
       "Deposit request received",
       paragraph(
-        `Hi ${esc(first)}, we've received your deposit request and our team is verifying the payment.`
+        `Hi ${esc(first)}, your deposit request has reached us. Our team is checking the payment details before adding any funds to your account.`
       ) +
         amountHero(money(params.amount), "Pending verification", "brand") +
         panel(rows, "Payment details") +
+        sectionTitle("What happens next") +
+        steps([
+          ["Payment review", "We compare the submitted payment details with the funds received."],
+          ["Account update", "If the payment is verified, the deposit will be credited and we will send you a confirmation."],
+          ["If we cannot verify it", "We will email you with the available information and the next step."],
+        ]) +
         paragraph(
-          "Nothing has been credited yet — your balance updates the moment the payment is confirmed, and we'll email you either way."
+          "This amount has not been credited yet. Please keep your payment confirmation until the review is complete, and avoid submitting the same deposit again while this request is pending. We will email you when its status changes."
         ),
-      `Verifying your ${money(params.amount)} deposit — nothing credited yet.`,
-      { eyebrow: "Deposit", tone: "brand" }
+      `Your ${money(params.amount)} deposit request is under review.`,
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
-We've received your deposit request and are verifying the payment.
+Your deposit request has reached us. Our team is checking the payment details before adding any funds to your account.
 
 Amount: ${money(params.amount)}
 Method: ${params.method}${params.reference?.trim() ? `\nReference: ${params.reference.trim()}` : ""}
 
-Nothing has been credited yet. We'll email you as soon as the payment is confirmed.`,
+WHAT HAPPENS NEXT
+1. We compare the submitted payment details with the funds received.
+2. If verified, the deposit will be credited and we will send a confirmation.
+3. If we cannot verify it, we will email you with the available information and next step.
+
+This amount has not been credited yet. Keep your payment confirmation until the review is complete, and avoid submitting the same deposit again while this request is pending.`,
   }
 }
 
@@ -743,18 +793,31 @@ export function depositApprovedEmail(params: {
     html: layout(
       "Deposit confirmed",
       paragraph(
-        `Hi ${esc(first)}, your deposit has been verified and credited to your account.`
+        `Hi ${esc(first)}, we have verified your deposit and added it to your account balance. The funds are now included in the available balance shown below.`
       ) +
         amountHero(money(params.amount), "Credited to your account", "success") +
-        panel([["New balance", money(params.newBalance)]]),
-      `${money(params.amount)} is now available in your account.`,
-      { eyebrow: "Deposit", tone: "success" }
+        panel(
+          [
+            ["Deposit credited", money(params.amount)],
+            ["Updated account balance", money(params.newBalance)],
+          ],
+          "Account summary"
+        ) +
+        sectionTitle("Next step") +
+        paragraph(
+          "You can sign in to review your updated balance and recent account activity. Keep this message with your payment records for reference."
+        ),
+      `${money(params.amount)} was verified and added to your account balance.`,
+      { tone: "success" }
     ),
     text: `Hi ${first},
 
-Your deposit of ${money(params.amount)} has been verified and credited.
+We have verified your deposit and added it to your account balance.
 
-New balance: ${money(params.newBalance)}`,
+Deposit credited: ${money(params.amount)}
+Updated account balance: ${money(params.newBalance)}
+
+Sign in to review your updated balance and recent account activity. Keep this message with your payment records for reference.`,
   }
 }
 
@@ -770,20 +833,31 @@ export function depositRejectedEmail(params: {
     html: layout(
       "Deposit not verified",
       paragraph(
-        `Hi ${esc(first)}, we were unable to verify your deposit of ${money(params.amount)}.`
+        `Hi ${esc(first)}, we could not match the payment details to a verified deposit, so ${money(params.amount)} has not been added to your account.`
       ) +
         reasonPanel(params.reason) +
+        sectionTitle("What you can do") +
+        steps([
+          ["Review the payment details", "Check the payment method, amount and reference you submitted against your receipt."],
+          ["Allow for processing", "If you have just paid, check with your payment provider that the transfer has completed."],
+          ["Contact support if needed", "If the details are correct or you are unsure, contact support and include the payment reference."],
+        ]) +
         paragraph(
-          "No funds have been credited and nothing has been taken from your balance. Please check the payment details and submit again, or contact support."
+          "No funds have been credited to your account from this request. Keep your payment receipt so the team can review it if you contact support."
         ),
-      `We couldn't verify your ${money(params.amount)} deposit.`,
-      { eyebrow: "Deposit", tone: "danger" }
+      `Your ${money(params.amount)} deposit could not be verified. Review the payment details for next steps.`,
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
-We couldn't verify your deposit of ${money(params.amount)}.${reasonText(params.reason)}
+We could not match the payment details to a verified deposit, so ${money(params.amount)} has not been added to your account.${reasonText(params.reason)}
 
-No funds were credited. Please check the payment details and submit again, or contact support.`,
+WHAT YOU CAN DO
+1. Check the payment method, amount and reference against your receipt.
+2. If you have just paid, check with your payment provider that the transfer has completed.
+3. If the details are correct or you are unsure, contact support and include the payment reference.
+
+No funds were credited from this request. Keep your payment receipt in case the team needs to review it.`,
   }
 }
 
@@ -804,31 +878,43 @@ export function withdrawalSubmittedEmail(params: {
     html: layout(
       "Withdrawal request received",
       paragraph(
-        `Hi ${esc(first)}, we've received your withdrawal request and it's now awaiting review.`
+        `Hi ${esc(first)}, your withdrawal request has been received and is waiting for review. The amount is being held while the request is processed, so it is temporarily unavailable for other account activity.`
       ) +
         amountHero(money(params.amount), "Awaiting review", "brand") +
         panel(
           [
+            ["Requested amount", money(params.amount)],
             ["Fee", money(params.fee)],
             ["Method", params.method],
           ],
           "Request details"
         ) +
+        sectionTitle("While it is being reviewed") +
+        steps([
+          ["Review", "The request and payout details are checked before it is approved or declined."],
+          ["Status update", "We will email you when the review is complete."],
+          ["Check your account", "You can sign in to review your request and its current status."],
+        ]) +
         paragraph(
-          "These funds are on hold and are no longer available to trade while the request is reviewed."
+          "The requested funds remain on hold during review and are not available to trade. If the request is declined or cancelled, we will send a separate update about the funds."
         ),
-      `${money(params.amount)} is on hold pending review.`,
-      { eyebrow: "Withdrawal", tone: "brand" }
+      `Your ${money(params.amount)} withdrawal request is awaiting review.`,
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
-We've received your withdrawal request and it's awaiting review.
+Your withdrawal request has been received and is waiting for review. The amount is held during processing.
 
-Amount: ${money(params.amount)}
+Requested amount: ${money(params.amount)}
 Fee: ${money(params.fee)}
 Method: ${params.method}
 
-These funds are on hold and are no longer available to trade while the request is reviewed.`,
+WHILE IT IS BEING REVIEWED
+1. We check the request and payout details.
+2. We will email you when the review is complete.
+3. You can sign in to review the request status.
+
+The requested funds remain on hold and are not available to trade. If the request is declined or cancelled, we will send a separate update.`,
   }
 }
 
@@ -845,7 +931,7 @@ export function withdrawalApprovedEmail(params: {
     html: layout(
       "Withdrawal approved",
       paragraph(
-        `Hi ${esc(first)}, your withdrawal has been approved and the payment is on its way.`
+        `Hi ${esc(first)}, your withdrawal has been approved and sent to the payout method shown below. The receiving bank or network controls when it appears in the destination account.`
       ) +
         amountHero(money(params.amount), "On its way to you", "success") +
         panel(
@@ -856,18 +942,20 @@ export function withdrawalApprovedEmail(params: {
           "Payment details"
         ) +
         paragraph(
-          "Depending on your bank or network, funds can take a short while to appear."
+          "Processing times vary by bank and payment network. If the payment has not appeared after the usual processing period for your method, contact your provider first and then our support team if you still need help."
         ),
       `${money(params.amount)} approved and on its way.`,
-      { eyebrow: "Withdrawal", tone: "success" }
+      { tone: "success" }
     ),
     text: `Hi ${first},
 
-Your withdrawal of ${money(params.amount)} via ${params.method} has been approved and the payment is on its way.
+Your withdrawal has been approved and sent to the payout method shown below.
 
+Amount: ${money(params.amount)}
+Method: ${params.method}
 Remaining balance: ${money(params.newBalance)}
 
-Depending on your bank or network, funds can take a short while to appear.`,
+Processing times vary by bank and payment network. If the payment has not appeared after the usual processing period for your method, contact your provider first and then support if you still need help.`,
   }
 }
 
@@ -883,20 +971,32 @@ export function withdrawalRejectedEmail(params: {
     html: layout(
       "Withdrawal declined",
       paragraph(
-        `Hi ${esc(first)}, your withdrawal request for ${money(params.amount)} was declined.`
+        `Hi ${esc(first)}, your withdrawal request for ${money(params.amount)} was not approved. The information below explains the outcome and what you can do next.`
       ) +
         reasonPanel(params.reason) +
+        amountHero(money(params.amount), "Returned to available balance", "brand") +
+        sectionTitle("Next steps") +
+        steps([
+          ["Review the reason", "Check the review note above and confirm that your payout details are current."],
+          ["Update your details if needed", "Correct any information that may have prevented the request from being processed."],
+          ["Submit again when ready", "The funds are available in your account, so you can make a new request after checking the details."],
+        ]) +
         paragraph(
-          "The funds have been released back into your balance and are available to trade or withdraw again."
+          "The hold has been released and the funds are available in your account again. If you believe this decision was made in error, contact support before submitting another request."
         ),
-      `${money(params.amount)} released back into your balance.`,
-      { eyebrow: "Withdrawal", tone: "danger" }
+      `Your ${money(params.amount)} withdrawal request was declined and the hold has been released.`,
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
-Your withdrawal of ${money(params.amount)} was declined.${reasonText(params.reason)}
+Your withdrawal request for ${money(params.amount)} was not approved.${reasonText(params.reason)}
 
-The funds have been released back into your balance.`,
+The hold has been released and the funds are available in your account again.
+
+NEXT STEPS
+1. Review the note above and confirm that your payout details are current.
+2. Update any information that may have prevented the request from being processed.
+3. Submit a new request when ready. If you believe the decision was made in error, contact support first.`,
   }
 }
 
@@ -912,23 +1012,36 @@ export function withdrawalCancelledEmail(params: {
     html: layout(
       "Withdrawal cancelled",
       paragraph(
-        `Hi ${esc(first)}, your withdrawal request for ${money(params.amount)} has been cancelled and the hold on those funds is lifted.`
+        `Hi ${esc(first)}, your withdrawal request for ${money(params.amount)} has been cancelled. The hold has been removed and the funds are available in your account again.`
       ) +
-        amountHero(money(params.amount), "Released back to you", "warn") +
-        panel([["Available balance", money(params.newBalance)]]) +
+        amountHero(money(params.amount), "Available again", "brand") +
+        panel(
+          [
+            ["Request status", "Cancelled"],
+            ["Available balance", money(params.newBalance)],
+          ],
+          "Account summary"
+        ) +
+        sectionTitle("Need to withdraw again?") +
+        paragraph(
+          "Review the payout details and submit a new request from your account when you are ready. The cancelled request will not continue processing."
+        ) +
         callout(
-          "If you didn't cancel this request, contact support straight away."
+          "If you did not cancel this request, contact support as soon as possible and review your recent account activity.",
+          "warn"
         ),
       `${money(params.amount)} is available again.`,
-      { eyebrow: "Withdrawal", tone: "warn" }
+      { tone: "warn" }
     ),
     text: `Hi ${first},
 
-Your withdrawal request for ${money(params.amount)} has been cancelled and the hold is lifted.
+Your withdrawal request for ${money(params.amount)} has been cancelled. The hold has been removed and the funds are available in your account again.
 
 Available balance: ${money(params.newBalance)}
 
-If you didn't cancel this request, contact support straight away.`,
+The cancelled request will not continue processing. Review the payout details before submitting a new request.
+
+If you did not cancel this request, contact support as soon as possible and review your recent account activity.`,
   }
 }
 
@@ -981,11 +1094,17 @@ export function withdrawalPinEmail(params: {
     html: layout(
       "Your withdrawal PIN",
       paragraph(
-        `Hi ${esc(first)}, here is the PIN for the withdrawal you are making.`
+        `Hi ${esc(first)}, use this one-time PIN to confirm the withdrawal request you are making. Keep the code private while you complete the confirmation.`
       ) +
         codeHero(params.pin, "Your withdrawal PIN") +
+        sectionTitle("Use your PIN") +
+        steps([
+          ["Enter it on the withdrawal page", "Use the code above to confirm the request you are currently making."],
+          ["Use it before it expires", `This code is valid for ${esc(window)} and can only be used once.`],
+          ["Check the request details", "Make sure the amount and payout method on the withdrawal page are correct before confirming."],
+        ]) +
         paragraph(
-          `It expires in ${esc(window)} and can only be used once. Enter it on the withdrawal page to confirm your request.`
+          "If you did not start a withdrawal, do not use this code. Contact support using the details in the footer and review your account activity."
         ) +
         callout(
           "Your account manager may also send you this same PIN in your chat with them. That is normal — it will be the same number you see above. Checking that the two match is a good habit.",
@@ -996,7 +1115,7 @@ export function withdrawalPinEmail(params: {
           "warn"
         ),
       `Your withdrawal PIN is ${params.pin} — it expires in ${window}.`,
-      { eyebrow: "Withdrawal security", tone: "warn" }
+      { tone: "brand" }
     ),
     text: `Hi ${first},
 
@@ -1020,23 +1139,26 @@ export function withdrawalPinRevokedEmail(params: {
     html: layout(
       "Your withdrawal PIN was cancelled",
       paragraph(
-        `Hi ${esc(first)}, the withdrawal PIN issued for your account has been cancelled and can no longer be used.`
+        `Hi ${esc(first)}, the withdrawal PIN issued for your ${BRAND} account has been cancelled. It is no longer valid and cannot be used to confirm a withdrawal.`
       ) +
+        sectionTitle("If you still need to withdraw") +
         paragraph(
-          "If you still need to withdraw, contact your account manager for a new PIN."
+          "Contact your account manager to request a new PIN, then use it only on the withdrawal page for the request you are making. Review the request details before confirming."
         ) +
         callout(
-          "If someone contacts you asking for the old PIN, it is not us. We never ask for it.",
+          `The old PIN cannot be used. Never send a PIN to anyone or read it out; ${BRAND} will not ask you to share it by email, chat or phone.`,
           "warn"
         ),
-      "The PIN issued for your account is no longer valid.",
-      { eyebrow: "Withdrawal security", tone: "neutral" }
+      "Your previous withdrawal PIN has been cancelled and is no longer valid.",
+      { tone: "neutral" }
     ),
     text: `Hi ${first},
 
-The withdrawal PIN issued for your account has been cancelled and can no longer be used.
+The withdrawal PIN issued for your ${BRAND} account has been cancelled. It is no longer valid and cannot be used to confirm a withdrawal.
 
-If you still need to withdraw, contact your account manager for a new PIN. We will never ask you for a PIN.`,
+If you still need to withdraw, contact your account manager to request a new PIN. Use it only on the withdrawal page for your current request, after reviewing the details.
+
+The old PIN cannot be used. Never send a PIN to anyone or read it out; ${BRAND} will not ask you to share it by email, chat or phone.`,
   }
 }
 
@@ -1073,11 +1195,17 @@ export function subscriptionConfirmedEmail(params: {
           ],
           "Plan terms"
         ) +
+        sectionTitle("Your plan timeline") +
+        steps([
+          ["Plan is active", "The principal shown above is committed to this plan for its stated duration."],
+          ["Returns are credited", "Returns follow the plan terms shown in this email and are added to your account balance."],
+          ["At maturity", `The plan ends on ${formatDate(params.endsAt)}. The principal and any amount earned are reflected in your account balance.`],
+        ]) +
         paragraph(
-          "Returns accrue daily and are credited straight to your balance. You can cancel early from the Plans page — the principal is returned, and payouts already credited stay with you."
+          "You can review the plan in the Plans section of your account. If you choose to cancel early, the principal is returned and payouts already credited stay with you; no further returns accrue after cancellation."
         ),
       `${money(params.principal)} committed — matures ${formatDate(params.endsAt)}.`,
-      { eyebrow: "Investment plan", tone: "success" }
+      { tone: "success" }
     ),
     text: `Hi ${first},
 
@@ -1089,7 +1217,7 @@ Duration: ${params.durationDays} days
 Matures on: ${formatDate(params.endsAt)}
 Available balance: ${money(params.newBalance)}
 
-Returns accrue daily and are credited to your balance.`,
+Returns accrue daily under the plan terms and are credited to your balance. You can review this plan in the Plans section of your account. If you choose to cancel early, the principal is returned and payouts already credited stay with you; no further returns accrue after cancellation.`,
   }
 }
 
@@ -1117,11 +1245,12 @@ export function subscriptionCompletedEmail(params: {
           ],
           "Plan summary"
         ) +
+        sectionTitle("Your balance is ready") +
         paragraph(
-          "The funds are available now — withdraw them, or put them into another plan."
+          "The principal and earnings shown above are now available in your account balance. Sign in to review your account activity, keep these figures with your records, or decide what to do with the available funds next."
         ),
       `${money(params.principal)} returned plus ${money(params.totalEarned)} earned.`,
-      { eyebrow: "Investment plan", tone: "success" }
+      { tone: "success" }
     ),
     text: `Hi ${first},
 
@@ -1131,7 +1260,7 @@ Principal returned: ${money(params.principal)}
 Total earned: ${money(params.totalEarned)}
 New balance: ${money(params.newBalance)}
 
-The funds are available now.`,
+The principal and earnings are now available in your account balance. Sign in to review your account activity and decide what to do with the available funds next.`,
   }
 }
 
@@ -1148,24 +1277,32 @@ export function subscriptionCancelledEmail(params: {
     html: layout(
       `Your ${esc(params.planName)} plan was cancelled`,
       paragraph(
-        `Hi ${esc(first)}, the plan has been closed early and your principal is back in your balance.`
+        `Hi ${esc(first)}, your ${esc(params.planName)} plan has been closed before its scheduled end date. The principal shown below has been returned to your available balance.`
       ) +
-        amountHero(money(params.principal), "Principal returned", "warn") +
-        panel([["Available balance", money(params.newBalance)]]) +
+        amountHero(money(params.principal), "Principal returned", "brand") +
+        panel(
+          [
+            ["Plan", params.planName],
+            ["Principal returned", money(params.principal)],
+            ["Available balance", money(params.newBalance)],
+          ],
+          "Account summary"
+        ) +
+        sectionTitle("What happens now") +
         paragraph(
-          "Returns already credited stay with you. No further returns will accrue on this plan."
+          "Returns already credited to your account remain yours. No additional returns will accrue on this plan after its cancellation. You can review the updated balance and account activity after signing in."
         ),
       `${money(params.principal)} returned to your balance.`,
-      { eyebrow: "Investment plan", tone: "warn" }
+      { tone: "warn" }
     ),
     text: `Hi ${first},
 
-Your ${params.planName} plan was cancelled early.
+Your ${params.planName} plan was closed before its scheduled end date.
 
 Principal returned: ${money(params.principal)}
 Available balance: ${money(params.newBalance)}
 
-Returns already credited stay with you. No further returns will accrue.`,
+Returns already credited remain in your account. No additional returns will accrue on this plan after cancellation. Sign in to review the updated balance and account activity.`,
   }
 }
 
@@ -1183,21 +1320,32 @@ export function accountCreditedEmail(params: {
     html: layout(
       "Account credited",
       paragraph(
-        `Hi ${esc(first)}, funds have been added to your account.`
+        `Hi ${esc(first)}, a credit has been posted to your ${BRAND} account. The summary below shows the amount added and your updated balance.`
       ) +
         amountHero(money(params.amount), "Added to your balance", "success") +
-        panel([
-          ...(details ? ([["Details", details]] as Array<[string, string]>) : []),
-          ["New balance", money(params.newBalance)],
-        ]),
-      `${money(params.amount)} added to your balance.`,
-      { eyebrow: "Account", tone: "success" }
+        panel(
+          [
+            ...(details ? ([["Credit details", details]] as Array<[string, string]>) : []),
+            ["Amount credited", money(params.amount)],
+            ["Updated balance", money(params.newBalance)],
+          ],
+          "Account summary"
+        ) +
+        sectionTitle("Review your activity") +
+        paragraph(
+          "Sign in to see this credit alongside your recent account activity. If you do not recognize the credit or the details do not look right, contact support using the details in the footer."
+        ),
+      `${money(params.amount)} was credited to your account.`,
+      { tone: "success" }
     ),
     text: `Hi ${first},
 
-Your account was credited ${money(params.amount)}.${details ? `\n\nDetails: ${details}` : ""}
+${money(params.amount)} was credited to your account.${details ? `\n\nCredit details: ${details}` : ""}
 
-New balance: ${money(params.newBalance)}`,
+Amount credited: ${money(params.amount)}
+Updated balance: ${money(params.newBalance)}
+
+Sign in to see this credit alongside your recent account activity. If you do not recognize it or the details do not look right, contact support.`,
   }
 }
 
@@ -1229,7 +1377,7 @@ export function holdingAddedEmail(params: {
     html: layout(
       "Position added",
       paragraph(
-        `Hi ${esc(first)}, a new position has been added to your portfolio and the matching funds credited to your balance.`
+        `Hi ${esc(first)}, a new ${esc(params.name)} position has been recorded in your portfolio. The position and account value are listed below so you can compare this update with your recent activity.`
       ) +
         amountHero(money(params.valueUsd), "Added to your balance", "success") +
         panel(
@@ -1240,20 +1388,26 @@ export function holdingAddedEmail(params: {
             ["New balance", money(params.newBalance)],
           ],
           "Position details"
+        ) +
+        sectionTitle("Review your portfolio") +
+        paragraph(
+          "Sign in to view the position with your other portfolio activity. The value shown in this email is the value recorded for this update; your account activity remains the place to review the latest information."
         ),
       // layout() interpolates the preheader raw — the symbol is admin-entered.
       `${esc(position)} — ${money(params.valueUsd)} added to your balance.`,
-      { eyebrow: "Portfolio", tone: "success" }
+      { tone: "success" }
     ),
     text: `Hi ${first},
 
-A new position has been added to your portfolio and the matching funds credited to your balance.
+A new ${params.name} position has been recorded in your portfolio.
 
 Asset: ${params.name}
 Position: ${position}
 Value: ${money(params.valueUsd)}
 
-New balance: ${money(params.newBalance)}`,
+New balance: ${money(params.newBalance)}
+
+Sign in to view the position with your other portfolio activity. The value shown in this email is the value recorded for this update; review your account activity for the latest information.`,
   }
 }
 
@@ -1263,7 +1417,7 @@ New balance: ${money(params.newBalance)}`,
  * Split from `accountCreditedEmail` because they were indistinguishable in an
  * inbox: earning a return and having a typo corrected both arrived as "Your
  * account has been credited". Profit is what the platform sells, so it gets the
- * subject line, the eyebrow and the caption that say so.
+ * subject line, the caption that say so.
  */
 export function profitCreditedEmail(params: {
   fullName: string
@@ -1279,7 +1433,7 @@ export function profitCreditedEmail(params: {
     html: layout(
       "Profit credited",
       paragraph(
-        `Hi ${esc(first)}, your account has earned a return and it is already in your balance.`
+        `Hi ${esc(first)}, a profit credit has been posted to your ${BRAND} account. The amount shown below has been added to your balance.`
       ) +
         amountHero(money(params.amount), "Profit earned", "success") +
         panel(
@@ -1289,14 +1443,18 @@ export function profitCreditedEmail(params: {
               : []),
             ["New balance", money(params.newBalance)],
           ],
-          "Summary"
+          "Profit summary"
+        ) +
+        sectionTitle("Review the credit") +
+        paragraph(
+          "Sign in to see this credit in your recent account activity and compare it with the related investment or account entry. The updated balance below includes this credit."
         ),
-      `${money(params.amount)} profit credited to your account.`,
-      { eyebrow: "Profit", tone: "success" }
+      `${money(params.amount)} profit was credited to your account.`,
+      { tone: "success" }
     ),
     text: `Hi ${first},
 
-Your account has earned a return of ${money(params.amount)} and it is already in your balance.${details ? `\n\nDetails: ${details}` : ""}
+Profit of ${money(params.amount)} has been credited to your account.${details ? `\n\nDetails: ${details}` : ""}
 
 New balance: ${money(params.newBalance)}`,
   }
@@ -1310,8 +1468,7 @@ New balance: ${money(params.newBalance)}`,
  * holding took it back without a word.
  *
  * Carries a support address, because the one thing someone will want after
- * reading this is a way to ask why. Amber rather than red — a correction is
- * routine, and dressing it as an alarm invites a support ticket per entry.
+ * reading this is a way to ask why.
  */
 export function accountDebitedEmail(params: {
   fullName: string
@@ -1329,7 +1486,7 @@ export function accountDebitedEmail(params: {
     html: layout(
       "Funds removed",
       paragraph(
-        `Hi ${esc(first)}, an adjustment has been made to your account and funds have been removed from your balance.`
+        `Hi ${esc(first)}, an account adjustment has been recorded and ${money(params.amount)} has been removed from your available balance. The summary below shows the information recorded for this update.`
       ) +
         amountHero(money(params.amount), "Removed from your balance", "warn") +
         panel(
@@ -1339,20 +1496,21 @@ export function accountDebitedEmail(params: {
               : []),
             ["New balance", money(params.newBalance)],
           ],
-          "Summary"
+          "Adjustment summary"
         ) +
+        sectionTitle("Review this update") +
         paragraph(
-          `If this does not look right, reply to this email or contact ${mailto} and we will look into it.`
+          `Sign in to review this adjustment alongside your recent account activity. If the amount or reason does not look right, contact ${mailto} and include the details shown above so our team can investigate.`
         ),
       `${money(params.amount)} removed from your balance.`,
-      { eyebrow: "Account", tone: "warn" }
+      { tone: "warn" }
     ),
     text: `Hi ${first},
 
-An adjustment has been made to your account and ${money(params.amount)} has been removed from your balance.${details ? `\n\nReason: ${details}` : ""}
+An account adjustment has been recorded and ${money(params.amount)} has been removed from your available balance.${details ? `\n\nReason: ${details}` : ""}
 
 New balance: ${money(params.newBalance)}
 
-If this does not look right, contact ${params.supportEmail}.`,
+Sign in to review this adjustment with your recent account activity. If the amount or reason does not look right, contact ${params.supportEmail} and include the details shown above so our team can investigate.`,
   }
 }

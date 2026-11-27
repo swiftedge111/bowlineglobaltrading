@@ -1,3 +1,4 @@
+import { shareImage } from "@/lib/seo"
 import { company, faqs } from "@/lib/site"
 
 /**
@@ -23,7 +24,7 @@ const organization = {
   alternateName: company.shortName,
   url: company.url,
   logo: `${company.url}/logo-mark.png`,
-  image: `${company.url}/og-image.jpg`,
+  image: new URL(shareImage.url, company.url).href,
   description: company.description,
   email: company.email,
   telephone: company.phone,

@@ -6,14 +6,15 @@ import { company } from "@/lib/site"
 import { PasswordRecoveryShell } from "@/components/auth/password-recovery-shell"
 import { ResetPasswordForm } from "@/components/auth/reset-password-form"
 import { Skeleton } from "@/components/ui/skeleton"
+import { pageSeo } from "@/lib/seo"
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageSeo({
   title: "Set a New Password",
   description: `Choose a new password for your ${company.name} account.`,
   // A page reachable only via a one-time emailed token has no business in an
   // index.
   robots: { index: false, follow: false },
-}
+})
 
 export default function ResetPasswordPage() {
   return (

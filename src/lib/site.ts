@@ -26,18 +26,21 @@ const shortName = "Bowline Global"
 const wordmarkSuffix = "Trading"
 const name = `${shortName} ${wordmarkSuffix}`
 const phone = process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || undefined
+const vercelProductionDomain = process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL?.trim()
 
 export const company = {
   name,
   shortName,
   wordmarkSuffix,
-  tagline: "Trade Forex, Crypto, Stocks & Commodities",
+  tagline: "Markets & Investing",
   description:
-    `${name} is a secure multi-asset brokerage built for serious investors. Trade over 1,000 instruments across forex, crypto, stocks and commodities with institutional-grade tools, tight spreads and 24/7 support.`,
+    "Explore forex, crypto, stocks, and commodities. Compare investment plans and track your portfolio in one place.",
   email: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || undefined,
   phone,
   phoneHref: phone ? `tel:${phone.replace(/[^+\d]/g, "")}` : undefined,
-  url: process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "") || "http://localhost:3000",
+  url:
+    process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "") ||
+    (vercelProductionDomain ? `https://${vercelProductionDomain}` : "http://localhost:3000"),
   address: process.env.NEXT_PUBLIC_OFFICE_ADDRESS?.trim() || undefined,
 }
 
