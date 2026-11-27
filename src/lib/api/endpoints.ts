@@ -4,9 +4,13 @@ import type {
   AdminDepositRow,
   AdminDepositSummary,
   AdminPin,
+  AdminPinSummary,
   AdminPlan,
   AdminStats,
   AdminSubscriptionRow,
+  AdminSubscriptionSort,
+  AdminSubscriptionSummary,
+  AdminSubscriptionView,
   AdminUserCounts,
   AdminUserDetail,
   AdminUserListItem,
@@ -15,6 +19,7 @@ import type {
   AdminWithdrawalRow,
   AdminWithdrawalSummary,
   AuditLogEntry,
+  AuditLogFilters,
   CreateWithdrawalInput,
   DepositMethod,
   DepositMethods,
@@ -24,6 +29,7 @@ import type {
   LoginInput,
   Paginated,
   PaymentMethodConfig,
+  PinStatus,
   PerformancePeriod,
   PerformanceSeries,
   Plan,
@@ -317,15 +323,34 @@ export const admin = {
     request<{ deleted: boolean }>(`/admin/plans/${id}`, { method: "DELETE" }),
 
   subscriptions: (
-    params: { page?: number; limit?: number; status?: SubscriptionStatus } = {}
+    params: {
+      page?: number
+      limit?: number
+      status?: SubscriptionStatus
+      view?: AdminSubscriptionView
+      planId?: string
+      search?: string
+      sort?: AdminSubscriptionSort
+    } = {}
   ) =>
     request<Paginated<AdminSubscriptionRow>>("/admin/subscriptions", {
       query: params,
     }),
 
-  cancelSubscription: (id: string) =>
+  subscriptionSummary: () =>
+    request<AdminSubscriptionSummary>("/admin/subscriptions/summary"),
+
+  /** Pays everything earned so far, now, instead of waiting for the job. */
+  settleSubscription: (id: string) =>
+    request<{ periodsPaid: number; credited: string; matured: boolean }>(
+      `/admin/subscriptions/${id}/settle`,
+      { method: "POST" }
+    ),
+
+  cancelSubscription: (id: string, input: { reason?: string } = {}) =>
     request<{ message: string }>(`/admin/subscriptions/${id}/cancel`, {
       method: "POST",
+      body: input,
     }),
 
   deposits: (
@@ -398,13 +423,18 @@ export const admin = {
       body: input,
     }),
 
-  pins: (uid?: string) =>
-    request<{ pins: AdminPin[] }>("/admin/pins", {
-      query: uid ? { uid } : {},
-    }),
+  pins: (
+    params: { page?: number; limit?: number; uid?: string; status?: PinStatus; search?: string } = {}
+  ) => request<Paginated<AdminPin>>("/admin/pins", { query: params }),
 
-  revokePin: (id: string) =>
-    request<void>(`/admin/pins/${id}`, { method: "DELETE" }),
+  pinSummary: () => request<AdminPinSummary>("/admin/pins/summary"),
+
+  /** `notifyUser` emails the client that the PIN no longer works. */
+  revokePin: (id: string, notifyUser = false) =>
+    request<void>(`/admin/pins/${id}`, {
+      method: "DELETE",
+      query: notifyUser ? { notifyUser: "true" } : {},
+    }),
 
   paymentMethods: () => request<PaymentMethodConfig>("/admin/payment-methods"),
 
@@ -450,8 +480,22 @@ export const admin = {
   deleteDigitalWallet: (id: string) =>
     request<void>(`/admin/payment-methods/wallets/${id}`, { method: "DELETE" }),
 
-  auditLogs: (params: { page?: number; limit?: number } = {}) =>
-    request<Paginated<AuditLogEntry>>("/admin/audit-logs", { query: params }),
+  auditLogs: (
+    params: AuditLogFilters & {
+      page?: number
+      limit?: number
+      cursor?: string
+    } = {}
+  ) =>
+    request<Paginated<AuditLogEntry>>("/admin/audit-logs", {
+      query: { ...params },
+    }),
+
+  auditLogFilters: () =>
+    request<{
+      actions: string[]
+      actors: Array<{ id: string; username: string; email: string }>
+    }>("/admin/audit-logs/filters"),
 
   /**
    * Mints the shareable receipt for a transaction, or returns the existing

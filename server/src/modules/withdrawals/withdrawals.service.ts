@@ -90,7 +90,7 @@ export async function createWithdrawal(
       if (locked.length === 0) throw new NotFoundError("User")
 
       // Consumed atomically — a PIN cannot be spent by two requests.
-      await consumePin(tx, userId, input.pin)
+      const pinId = await consumePin(tx, userId, input.pin)
 
       const { available } = await getBalanceSnapshot(userId, tx)
       if (available.lessThan(total)) {
@@ -117,7 +117,7 @@ export async function createWithdrawal(
         },
       })
 
-      return tx.withdrawalRequest.create({
+      const created = await tx.withdrawalRequest.create({
         data: {
           userId,
           amount,
@@ -127,6 +127,14 @@ export async function createWithdrawal(
           transactionId: transaction.id,
         },
       })
+
+      // So the PIN list can say what each PIN was spent on.
+      await tx.withdrawalPin.update({
+        where: { id: pinId },
+        data: { withdrawalId: created.id },
+      })
+
+      return created
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }
   )

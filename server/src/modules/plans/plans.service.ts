@@ -812,13 +812,145 @@ export async function retirePlan(params: {
 }
 
 /** Every subscription on the platform, newest first. */
+export const SUBSCRIPTION_SORTS = ["newest", "ending", "largest"] as const
+export type SubscriptionSort = (typeof SUBSCRIPTION_SORTS)[number]
+
+export const SUBSCRIPTION_VIEWS = ["maturing", "behind"] as const
+export type SubscriptionView = (typeof SUBSCRIPTION_VIEWS)[number]
+
+/** How long a payout may sit unpaid before the list calls it late. */
+const LATE_MS = 2 * 60 * 60 * 1000
+const WEEK_MS = 7 * PERIOD_MS
+
+/**
+ * Running subscriptions whose next payout, or maturity, is overdue by more
+ * than `LATE_MS`. The hourly job should never leave one here; when it does,
+ * the job is not running or one subscription keeps failing.
+ *
+ * Period k ends k days after `startedAt`, and `lastAccruedOn` is the end of
+ * the last paid one, so the next is due a day after it (or a day after the
+ * start, before the first payout).
+ */
+function behindWhere(now: Date): Prisma.SubscriptionWhereInput {
+  const cutoff = new Date(now.getTime() - LATE_MS - PERIOD_MS)
+  return {
+    status: SubscriptionStatus.ACTIVE,
+    OR: [
+      { lastAccruedOn: { lt: cutoff } },
+      { lastAccruedOn: null, startedAt: { lt: cutoff } },
+      { endsAt: { lt: new Date(now.getTime() - LATE_MS) } },
+    ],
+  }
+}
+
+function subscriptionWhere(params: {
+  status?: SubscriptionStatus | undefined
+  view?: SubscriptionView | undefined
+  planId?: string | undefined
+  search?: string | undefined
+  now: Date
+}): Prisma.SubscriptionWhereInput {
+  const and: Prisma.SubscriptionWhereInput[] = []
+
+  if (params.view === "behind") and.push(behindWhere(params.now))
+  else if (params.view === "maturing") {
+    and.push({
+      status: SubscriptionStatus.ACTIVE,
+      endsAt: { lte: new Date(params.now.getTime() + WEEK_MS) },
+    })
+  } else if (params.status) and.push({ status: params.status })
+
+  if (params.planId) and.push({ planId: params.planId })
+
+  if (params.search) {
+    const contains = { contains: params.search, mode: "insensitive" as const }
+    and.push({
+      OR: [
+        { id: params.search },
+        { user: { fullName: contains } },
+        { user: { email: contains } },
+        { user: { uid: contains } },
+      ],
+    })
+  }
+
+  return and.length ? { AND: and } : {}
+}
+
+const SUBSCRIPTION_ORDER: Record<SubscriptionSort, Prisma.SubscriptionOrderByWithRelationInput[]> = {
+  newest: [{ createdAt: "desc" }],
+  ending: [{ endsAt: "asc" }, { createdAt: "asc" }],
+  largest: [{ principal: "desc" }, { createdAt: "desc" }],
+}
+
+/** What a running subscription still has to pay before it matures. */
+function owedToMaturity(subscription: Subscription) {
+  if (subscription.status !== SubscriptionStatus.ACTIVE) return ZERO
+  const { totalPeriods } = accrualSchedule(subscription, subscription.startedAt)
+  const remaining = Math.max(0, totalPeriods - subscription.accruedPeriods)
+  return round2(bpsOf(subscription.principal, subscription.dailyReturnBps).mul(remaining))
+}
+
+function serializeAdminSubscription(
+  subscription: Subscription & {
+    plan: Plan
+    user: { uid: string; email: string; fullName: string }
+  },
+  now: Date
+) {
+  const base = serializeSubscription(subscription)
+  const active = subscription.status === SubscriptionStatus.ACTIVE
+  const { owed } = accrualSchedule(subscription, now)
+  const late = active && base.nextPayoutAt !== null
+    ? now.getTime() - base.nextPayoutAt.getTime() > LATE_MS
+    : false
+  const overdueMaturity = active && now.getTime() - subscription.endsAt.getTime() > LATE_MS
+
+  return {
+    id: subscription.id,
+    user: subscription.user,
+    planId: subscription.plan.id,
+    planName: subscription.plan.name,
+    planSlug: subscription.plan.slug,
+    principal: base.principal,
+    totalAccrued: base.totalAccrued,
+    status: subscription.status,
+    startedAt: subscription.startedAt,
+    endsAt: subscription.endsAt,
+    lastAccruedOn: subscription.lastAccruedOn,
+    /** When it stopped: the maturity date, or the moment it was cancelled. */
+    closedAt:
+      subscription.status === SubscriptionStatus.COMPLETED
+        ? subscription.endsAt
+        : subscription.status === SubscriptionStatus.CANCELLED
+          ? subscription.updatedAt
+          : null,
+    dailyReturnPercent: base.dailyReturnPercent,
+    /** What the plan offers new signups today; differs after a reprice. */
+    planDailyReturnPercent: (subscription.plan.dailyReturnBps / 100).toFixed(2),
+    dailyPayout: base.dailyPayout,
+    paidPeriods: base.paidPeriods,
+    totalPeriods: base.totalPeriods,
+    nextPayoutAt: base.nextPayoutAt,
+    owedToMaturity: serialize(owedToMaturity(subscription)),
+    /** Periods already earned but not yet paid. Normally 0, briefly 1. */
+    unpaidPeriods: active ? owed : 0,
+    /** Payout or maturity overdue by more than two hours. */
+    behind: late || overdueMaturity,
+  }
+}
+
 export async function adminListSubscriptions(params: {
   pagination: Pagination
   status?: SubscriptionStatus | undefined
+  view?: SubscriptionView | undefined
+  planId?: string | undefined
+  search?: string | undefined
+  sort?: SubscriptionSort | undefined
+  now?: Date
 }) {
-  const where: Prisma.SubscriptionWhereInput = params.status
-    ? { status: params.status }
-    : {}
+  const now = params.now ?? new Date()
+  const where = subscriptionWhere({ ...params, now })
 
   const [items, total] = await Promise.all([
     prisma.subscription.findMany({
@@ -827,26 +959,124 @@ export async function adminListSubscriptions(params: {
         plan: true,
         user: { select: { uid: true, email: true, fullName: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: SUBSCRIPTION_ORDER[params.sort ?? "newest"],
       ...toSkipTake(params.pagination),
     }),
     prisma.subscription.count({ where }),
   ])
 
   return {
-    items: items.map((subscription) => ({
-      id: subscription.id,
-      user: subscription.user,
-      planName: subscription.plan.name,
-      planSlug: subscription.plan.slug,
-      principal: serialize(subscription.principal),
-      totalAccrued: serialize(subscription.totalAccrued),
-      status: subscription.status,
-      startedAt: subscription.startedAt,
-      endsAt: subscription.endsAt,
-      lastAccruedOn: subscription.lastAccruedOn,
-    })),
+    items: items.map((subscription) => serializeAdminSubscription(subscription, now)),
     total,
+  }
+}
+
+/**
+ * The book at a glance: what is running, what it pays a day, what it still
+ * owes, what comes due this week, and whether accrual is keeping up.
+ */
+export async function adminSubscriptionSummary(now: Date = new Date()) {
+  const weekAhead = new Date(now.getTime() + WEEK_MS)
+  const monthAgo = new Date(now.getTime() - 30 * PERIOD_MS)
+
+  const [running, behind, completed30d, cancelled30d, plans] = await Promise.all([
+    prisma.subscription.findMany({ where: { status: SubscriptionStatus.ACTIVE } }),
+    prisma.subscription.count({ where: behindWhere(now) }),
+    prisma.subscription.count({
+      where: { status: SubscriptionStatus.COMPLETED, endsAt: { gte: monthAgo } },
+    }),
+    prisma.subscription.count({
+      where: { status: SubscriptionStatus.CANCELLED, updatedAt: { gte: monthAgo } },
+    }),
+    prisma.plan.findMany({
+      where: { subscriptions: { some: {} } },
+      select: { id: true, name: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }),
+  ])
+
+  let principal = ZERO
+  let daily = ZERO
+  let owed = ZERO
+  const maturing = { count: 0, principal: ZERO, returns: ZERO }
+
+  for (const subscription of running) {
+    const remaining = owedToMaturity(subscription)
+    principal = principal.add(subscription.principal)
+    daily = daily.add(bpsOf(subscription.principal, subscription.dailyReturnBps))
+    owed = owed.add(remaining)
+    if (subscription.endsAt <= weekAhead) {
+      maturing.count += 1
+      maturing.principal = maturing.principal.add(subscription.principal)
+      maturing.returns = maturing.returns.add(remaining)
+    }
+  }
+
+  return {
+    active: {
+      count: running.length,
+      principal: serialize(round2(principal)),
+      dailyPayout: serialize(round2(daily)),
+      owedToMaturity: serialize(round2(owed)),
+    },
+    maturing7d: {
+      count: maturing.count,
+      principal: serialize(round2(maturing.principal)),
+      returns: serialize(round2(maturing.returns)),
+    },
+    behind,
+    completed30d,
+    cancelled30d,
+    plans,
+  }
+}
+
+/**
+ * Pays one subscription everything it has earned, now, instead of waiting
+ * for the hourly job. The same guarded path the job takes, so running both at
+ * once still pays each period once.
+ */
+export async function adminSettleSubscription(params: {
+  subscriptionId: string
+  adminId: string
+  ip?: string | undefined
+}) {
+  const subscription = await prisma.subscription.findUnique({
+    where: { id: params.subscriptionId },
+  })
+  if (!subscription) throw new NotFoundError("Subscription")
+  if (subscription.status !== SubscriptionStatus.ACTIVE) {
+    throw new ValidationError("That subscription is no longer active.")
+  }
+
+  const outcome = await prisma.$transaction(
+    (tx) => accrueSubscription(subscription.id, new Date(), tx),
+    { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 30_000 }
+  )
+
+  if (!outcome) {
+    return { periodsPaid: 0, credited: "0.00", matured: false }
+  }
+  if (outcome.matured) sendMaturedEmail(outcome)
+
+  await recordAudit({
+    actorId: params.adminId,
+    action: "subscription.settle",
+    targetType: "Subscription",
+    targetId: subscription.id,
+    after: {
+      userId: subscription.userId,
+      periodsPaid: outcome.periodsPaid,
+      credited: serialize(outcome.credited),
+      matured: outcome.matured,
+    },
+    ip: params.ip,
+  })
+
+  return {
+    periodsPaid: outcome.periodsPaid,
+    credited: serialize(outcome.credited),
+    matured: outcome.matured,
   }
 }
 
@@ -858,6 +1088,7 @@ export async function adminListSubscriptions(params: {
 export async function adminCancelSubscription(params: {
   subscriptionId: string
   adminId: string
+  reason?: string | undefined
   ip?: string | undefined
 }): Promise<void> {
   const subscription = await prisma.subscription.findUnique({
@@ -875,6 +1106,7 @@ export async function adminCancelSubscription(params: {
     after: {
       userId: subscription.userId,
       principalReturned: serialize(subscription.principal),
+      ...(params.reason ? { reason: params.reason } : {}),
     },
     ip: params.ip,
   })

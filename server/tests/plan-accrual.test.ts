@@ -375,7 +375,7 @@ describe.skipIf(!hasDatabase)("PIN expiry without a job", () => {
   it("lists a lapsed PIN as EXPIRED", async () => {
     const { user, issued } = await lapsedPin()
 
-    const pins = await listPins(user.id)
+    const { pins } = await listPins({ userId: user.id })
     expect(pins.find((pin) => pin.id === issued.id)?.status).toBe(PinStatus.EXPIRED)
   })
 

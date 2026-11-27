@@ -536,6 +536,8 @@ export interface AdminWithdrawalSummary {
 
 export type PinStatus = "ACTIVE" | "USED" | "EXPIRED" | "REVOKED"
 
+export type PinShareState = "none" | "waiting" | "opened" | "lapsed"
+
 export interface AdminPin {
   id: string
   user: { uid: string; fullName: string; email: string } | null
@@ -543,6 +545,23 @@ export interface AdminPin {
   expiresAt: string
   usedAt: string | null
   createdAt: string
+  issuedBy: string | null
+  /** The one-time link, if one was made: not opened yet, opened, or dead. */
+  share: PinShareState
+  revealedAt: string | null
+  /** The withdrawal this PIN authorised. */
+  withdrawal: { id: string; amount: string; status: RequestStatus; createdAt: string } | null
+}
+
+export interface AdminPinSummary {
+  active: number
+  /** Live PINs that lapse within the hour. */
+  expiringSoon: number
+  /** Live PINs whose one-time link nobody has opened yet. */
+  linksWaiting: number
+  issuedToday: number
+  issued30d: number
+  used30d: number
 }
 
 /** Returned exactly once, to the issuing admin. */
@@ -593,10 +612,19 @@ export interface AuditLogEntry {
   action: string
   targetType: string | null
   targetId: string | null
+  targetUid: string | null
   before: unknown
   after: unknown
   ip: string | null
   createdAt: string
+}
+
+export interface AuditLogFilters {
+  action?: string
+  actorId?: string
+  from?: string
+  to?: string
+  search?: string
 }
 
 /* ---------------------------------------------------------- admin: plans */
@@ -639,9 +667,13 @@ export interface PlanInput {
   sortOrder: number
 }
 
+export type AdminSubscriptionView = "maturing" | "behind"
+export type AdminSubscriptionSort = "newest" | "ending" | "largest"
+
 export interface AdminSubscriptionRow {
   id: string
   user: QueueUser
+  planId: string
   planName: string
   planSlug: string
   principal: string
@@ -650,6 +682,36 @@ export interface AdminSubscriptionRow {
   startedAt: string
   endsAt: string
   lastAccruedOn: string | null
+  /** Maturity date, or when it was cancelled. Null while running. */
+  closedAt: string | null
+  /** The rate locked in at signup, e.g. `"2.50"`. */
+  dailyReturnPercent: string
+  /** What the plan offers new signups today. */
+  planDailyReturnPercent: string
+  dailyPayout: string
+  paidPeriods: number
+  totalPeriods: number
+  nextPayoutAt: string | null
+  owedToMaturity: string
+  /** Earned but not yet paid. */
+  unpaidPeriods: number
+  /** A payout or maturity overdue by more than two hours. */
+  behind: boolean
+}
+
+export interface AdminSubscriptionSummary {
+  active: {
+    count: number
+    principal: string
+    dailyPayout: string
+    owedToMaturity: string
+  }
+  maturing7d: { count: number; principal: string; returns: string }
+  behind: number
+  completed30d: number
+  cancelled30d: number
+  /** Plans that have at least one subscription, for the filter. */
+  plans: Array<{ id: string; name: string }>
 }
 
 /* ------------------------------------------------------- username checking */

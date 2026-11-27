@@ -174,7 +174,7 @@ export async function consumePin(
   tx: Prisma.TransactionClient,
   userId: string,
   pin: string
-): Promise<void> {
+): Promise<string> {
   const candidates = await tx.withdrawalPin.findMany({
     where: {
       userId,
@@ -194,24 +194,125 @@ export async function consumePin(
       // Lost the race with a concurrent request that used the same PIN.
       if (consumed.count === 0) break
 
-      return
+      return candidate.id
     }
   }
 
   throw new InvalidPinError()
 }
 
-export async function listPins(userId?: string) {
+export type PinShareState = "none" | "waiting" | "opened" | "lapsed"
+
+function shareStateOf(pin: {
+  shareToken: string | null
+  revealedAt: Date | null
+  status: PinStatus
+  expiresAt: Date
+}): PinShareState {
+  if (!pin.shareToken) return "none"
+  if (pin.revealedAt) return "opened"
+  if (pin.status !== PinStatus.ACTIVE || pin.expiresAt <= new Date()) return "lapsed"
+  return "waiting"
+}
+
+/**
+ * The PIN list for admins. Never includes the hash or the sealed copy: what a
+ * PIN was, once issued, is nobody's business but the client's.
+ */
+export async function listPins(params: {
+  userId?: string | undefined
+  status?: PinStatus | undefined
+  search?: string | undefined
+  skip?: number
+  take?: number
+} = {}) {
   await expireStalePins()
 
-  return prisma.withdrawalPin.findMany({
-    where: userId ? { userId } : {},
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    include: {
-      user: { select: { uid: true, email: true, fullName: true } },
-    },
-  })
+  const contains = params.search
+    ? { contains: params.search, mode: "insensitive" as const }
+    : null
+  const where: Prisma.WithdrawalPinWhereInput = {
+    ...(params.userId ? { userId: params.userId } : {}),
+    ...(params.status ? { status: params.status } : {}),
+    ...(contains
+      ? {
+          user: {
+            OR: [{ fullName: contains }, { email: contains }, { uid: contains }],
+          },
+        }
+      : {}),
+  }
+
+  const [rows, total] = await Promise.all([
+    prisma.withdrawalPin.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }],
+      skip: params.skip ?? 0,
+      take: params.take ?? 100,
+      include: {
+        user: { select: { uid: true, email: true, fullName: true } },
+        issuedBy: { select: { fullName: true } },
+        withdrawal: {
+          select: { id: true, amount: true, status: true, createdAt: true },
+        },
+      },
+    }),
+    prisma.withdrawalPin.count({ where }),
+  ])
+
+  return {
+    total,
+    pins: rows.map((pin) => ({
+      id: pin.id,
+      user: pin.user,
+      status: pin.status,
+      expiresAt: pin.expiresAt,
+      usedAt: pin.usedAt,
+      createdAt: pin.createdAt,
+      issuedBy: pin.issuedBy?.fullName ?? null,
+      share: shareStateOf(pin),
+      revealedAt: pin.revealedAt,
+      withdrawal: pin.withdrawal
+        ? {
+            id: pin.withdrawal.id,
+            amount: pin.withdrawal.amount.toFixed(2),
+            status: pin.withdrawal.status,
+            createdAt: pin.withdrawal.createdAt,
+          }
+        : null,
+    })),
+  }
+}
+
+/** Live PINs, what lapses soon, and how many issued PINs actually get used. */
+export async function pinSummary(now: Date = new Date()) {
+  await expireStalePins()
+
+  const hourAhead = new Date(now.getTime() + 60 * 60 * 1000)
+  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  const [active, expiringSoon, linksWaiting, issuedToday, issued30d, used30d] =
+    await Promise.all([
+      prisma.withdrawalPin.count({ where: { status: PinStatus.ACTIVE } }),
+      prisma.withdrawalPin.count({
+        where: { status: PinStatus.ACTIVE, expiresAt: { lte: hourAhead } },
+      }),
+      prisma.withdrawalPin.count({
+        where: {
+          status: PinStatus.ACTIVE,
+          shareToken: { not: null },
+          revealedAt: null,
+        },
+      }),
+      prisma.withdrawalPin.count({ where: { createdAt: { gte: dayAgo } } }),
+      prisma.withdrawalPin.count({ where: { createdAt: { gte: monthAgo } } }),
+      prisma.withdrawalPin.count({
+        where: { createdAt: { gte: monthAgo }, status: PinStatus.USED },
+      }),
+    ])
+
+  return { active, expiringSoon, linksWaiting, issuedToday, issued30d, used30d }
 }
 
 /**

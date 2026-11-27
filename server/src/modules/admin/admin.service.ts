@@ -727,17 +727,132 @@ export async function archiveHolding(params: {
   return { reversed: Boolean(reversalId) }
 }
 
-export async function listAuditLogs(pagination: Pagination) {
-  const [items, total] = await Promise.all([
-    prisma.auditLog.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { actor: { select: { username: true, email: true } } },
-      ...toSkipTake(pagination),
+export async function getAuditFilters() {
+  const [actions, actors] = await Promise.all([
+    prisma.auditLog.groupBy({ by: ["action"], orderBy: { action: "asc" } }),
+    prisma.user.findMany({
+      where: { auditLogs: { some: {} } },
+      orderBy: { username: "asc" },
+      select: { id: true, username: true, email: true },
     }),
-    prisma.auditLog.count(),
   ])
 
-  return { items, total }
+  return { actions: actions.map(({ action }) => action), actors }
+}
+
+async function auditSearch(
+  search: string
+): Promise<Prisma.AuditLogWhereInput[]> {
+  const contains = {
+    contains: search.replace(/[\\%_]/g, "\\$&"),
+    mode: "insensitive",
+  } as const
+  const identity: Prisma.UserWhereInput = {
+    OR: [{ email: search.toLowerCase() }, { uid: search.toUpperCase() }],
+  }
+  const users = await prisma.user.findMany({
+    where: identity,
+    select: {
+      id: true,
+      depositRequests: { select: { id: true } },
+      withdrawalRequests: { select: { id: true } },
+      holdings: { select: { id: true } },
+      transactions: { select: { id: true } },
+      subscriptions: { select: { id: true } },
+      pins: { select: { id: true } },
+    },
+  })
+
+  const matches: Prisma.AuditLogWhereInput[] = [
+    { targetId: contains },
+    { actor: { OR: [{ email: contains }, { uid: contains }] } },
+  ]
+  for (const user of users) {
+    matches.push(
+      { targetType: "User", targetId: user.id },
+      { before: { path: ["userId"], equals: user.id } },
+      { after: { path: ["userId"], equals: user.id } }
+    )
+    const targets = {
+      DepositRequest: user.depositRequests,
+      WithdrawalRequest: user.withdrawalRequests,
+      Holding: user.holdings,
+      Transaction: user.transactions,
+      Subscription: user.subscriptions,
+      WithdrawalPin: user.pins,
+    }
+    for (const [targetType, records] of Object.entries(targets)) {
+      if (records.length) {
+        matches.push({
+          targetType,
+          targetId: { in: records.map(({ id }) => id) },
+        })
+      }
+    }
+  }
+  return matches
+}
+
+export async function listAuditLogs(
+  query: Pagination & {
+    cursor?: string | undefined
+    action?: string | undefined
+    actorId?: string | undefined
+    from?: string | undefined
+    to?: string | undefined
+    search?: string | undefined
+  }
+) {
+  const { action, actorId, cursor, from, to, search } = query
+  const end = to && new Date(`${to}T00:00:00.000Z`)
+  if (end) end.setUTCDate(end.getUTCDate() + 1)
+
+  const where: Prisma.AuditLogWhereInput = {
+    ...(action ? { action } : {}),
+    ...(actorId ? { actorId: actorId === "system" ? null : actorId } : {}),
+    ...(from || end
+      ? {
+          createdAt: {
+            ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}),
+            ...(end ? { lt: end } : {}),
+          },
+        }
+      : {}),
+    ...(search ? { OR: await auditSearch(search) } : {}),
+  }
+  const [items, total] = await Promise.all([
+    prisma.auditLog.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: { actor: { select: { username: true, email: true } } },
+      ...(cursor
+        ? { cursor: { id: cursor }, skip: 1, take: query.limit }
+        : toSkipTake(query)),
+    }),
+    prisma.auditLog.count({ where }),
+  ])
+
+  const userIds = items.flatMap(({ targetType, targetId }) =>
+    targetType === "User" && targetId ? [targetId] : []
+  )
+  const users = userIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, uid: true },
+      })
+    : []
+  const uids = new Map(users.map(({ id, uid }) => [id, uid]))
+
+  return {
+    items: items.map((item) => ({
+      ...item,
+      targetUid:
+        item.targetType === "User" && item.targetId
+          ? (uids.get(item.targetId) ?? null)
+          : null,
+    })),
+    total,
+  }
 }
 
 const STATS_DAYS = 30

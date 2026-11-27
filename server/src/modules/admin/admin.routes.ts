@@ -1,5 +1,6 @@
 import {
   DepositMethod,
+  PinStatus,
   RequestStatus,
   Role,
   SubscriptionStatus,
@@ -35,7 +36,7 @@ import {
 } from "../../services/email/email.service.js"
 import { getProofLink, processDeposit } from "../deposits/deposits.service.js"
 import { issueReceipt } from "../receipts/receipts.service.js"
-import { issuePin, listPins, revokePin } from "../pins/pins.service.js"
+import { issuePin, listPins, pinSummary, revokePin } from "../pins/pins.service.js"
 import * as plansService from "../plans/plans.service.js"
 import { processWithdrawal } from "../withdrawals/withdrawals.service.js"
 import { processWithdrawalSchema } from "../withdrawals/withdrawals.schema.js"
@@ -687,32 +688,48 @@ adminRouter.post(
 
 adminRouter.get(
   "/pins",
-  validate({ query: z.object({ uid: z.string().trim().optional() }) }),
+  validate({
+    query: paginationSchema.extend({
+      uid: z.string().trim().optional(),
+      status: z.enum(PinStatus).optional(),
+      search: z.string().trim().min(1).max(120).optional(),
+    }),
+  }),
   asyncHandler(async (req, res) => {
-    const { uid } = req.query as { uid?: string }
+    const query = req.query as unknown as {
+      page: number
+      limit: number
+      uid?: string
+      status?: PinStatus
+      search?: string
+    }
 
     let userId: string | undefined
-    if (uid) {
-      const user = await prisma.user.findUnique({ where: { uid } })
+    if (query.uid) {
+      const user = await prisma.user.findUnique({ where: { uid: query.uid } })
       // An unknown UID must return an empty result.
       if (!user) {
-        ok(res, { pins: [] })
+        paginated(res, [], buildPageMeta(query.page, query.limit, 0))
         return
       }
       userId = user.id
     }
 
-    const pins = await listPins(userId)
-    ok(res, {
-      pins: pins.map((pin) => ({
-        id: pin.id,
-        user: pin.user,
-        status: pin.status,
-        expiresAt: pin.expiresAt,
-        usedAt: pin.usedAt,
-        createdAt: pin.createdAt,
-      })),
+    const { pins, total } = await listPins({
+      userId,
+      status: query.status,
+      search: query.search,
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
     })
+    paginated(res, pins, buildPageMeta(query.page, query.limit, total))
+  })
+)
+
+adminRouter.get(
+  "/pins/summary",
+  asyncHandler(async (_req, res) => {
+    ok(res, await pinSummary())
   })
 )
 
@@ -976,6 +993,10 @@ adminRouter.get(
   validate({
     query: paginationSchema.extend({
       status: z.enum(SubscriptionStatus).optional(),
+      view: z.enum(plansService.SUBSCRIPTION_VIEWS).optional(),
+      planId: z.string().trim().min(1).max(64).optional(),
+      search: z.string().trim().min(1).max(120).optional(),
+      sort: z.enum(plansService.SUBSCRIPTION_SORTS).optional(),
     }),
   }),
   asyncHandler(async (req, res) => {
@@ -983,24 +1004,62 @@ adminRouter.get(
       page: number
       limit: number
       status?: SubscriptionStatus
+      view?: plansService.SubscriptionView
+      planId?: string
+      search?: string
+      sort?: plansService.SubscriptionSort
     }
 
     const { items, total } = await plansService.adminListSubscriptions({
       pagination: { page: query.page, limit: query.limit },
       status: query.status,
+      view: query.view,
+      planId: query.planId,
+      search: query.search,
+      sort: query.sort,
     })
 
     paginated(res, items, buildPageMeta(query.page, query.limit, total))
   })
 )
 
+adminRouter.get(
+  "/subscriptions/summary",
+  asyncHandler(async (_req, res) => {
+    ok(res, await plansService.adminSubscriptionSummary())
+  })
+)
+
 adminRouter.post(
-  "/subscriptions/:id/cancel",
+  "/subscriptions/:id/settle",
   validate({ params: idParam }),
   asyncHandler(async (req, res) => {
+    ok(
+      res,
+      await plansService.adminSettleSubscription({
+        subscriptionId: req.params.id as string,
+        adminId: req.auth!.userId,
+        ip: clientIp(req),
+      })
+    )
+  })
+)
+
+adminRouter.post(
+  "/subscriptions/:id/cancel",
+  validate({
+    params: idParam,
+    body: z
+      .object({ reason: z.string().trim().max(500).optional() })
+      .optional()
+      .default({}),
+  }),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as { reason?: string }
     await plansService.adminCancelSubscription({
       subscriptionId: req.params.id as string,
       adminId: req.auth!.userId,
+      reason: body.reason || undefined,
       ip: clientIp(req),
     })
     ok(res, { message: "Subscription cancelled and principal returned." })
@@ -1009,11 +1068,32 @@ adminRouter.post(
 
 /* ------------------------------------------------------------- audit logs */
 
+const auditQuery = paginationSchema
+  .extend({
+    cursor: z.string().trim().min(1).max(120).optional(),
+    action: z.string().trim().min(1).max(120).optional(),
+    actorId: z.string().trim().min(1).max(120).optional(),
+    from: z.iso.date().optional(),
+    to: z.iso.date().optional(),
+    search: z.string().trim().max(254).optional(),
+  })
+  .refine(({ from, to }) => !from || !to || from <= to, {
+    path: ["to"],
+    message: "End date must be on or after the start date.",
+  })
+
+adminRouter.get(
+  "/audit-logs/filters",
+  asyncHandler(async (_req, res) => {
+    ok(res, await service.getAuditFilters())
+  })
+)
+
 adminRouter.get(
   "/audit-logs",
-  validate({ query: paginationSchema }),
+  validate({ query: auditQuery }),
   asyncHandler(async (req, res) => {
-    const query = req.query as unknown as { page: number; limit: number }
+    const query = req.query as unknown as z.infer<typeof auditQuery>
     const { items, total } = await service.listAuditLogs(query)
     paginated(res, items, buildPageMeta(query.page, query.limit, total))
   })
