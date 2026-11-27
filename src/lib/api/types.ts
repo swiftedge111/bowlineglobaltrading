@@ -325,6 +325,11 @@ export interface Subscription {
   status: SubscriptionStatus
   startedAt: string
   endsAt: string
+  /**
+   * The rate this subscription was opened at, e.g. `"2.50"`. Locked: it can
+   * differ from `plan.dailyReturnPercent` if the plan was edited since.
+   */
+  dailyReturnPercent: string
   /** What each daily period pays, e.g. `"12.00"`. */
   dailyPayout: string
   paidPeriods: number
@@ -608,6 +613,13 @@ export interface AdminPlan extends Plan {
     active: number
     /** Sum of live principal, so retiring a tier shows what it would strand. */
     activePrincipal: string
+    /** Returns paid to date, across every subscription ever. */
+    paidOut: string
+    /** Returns still due to running subscriptions before they mature. */
+    owedToMaturity: string
+    maturingThisWeek: number
+    /** Running subscriptions locked at a rate the plan no longer offers. */
+    onOlderRate: number
   }
 }
 

@@ -101,6 +101,7 @@ describe.skipIf(!hasDatabase)("plan accrual", () => {
         userId: user.id,
         planId: plan.id,
         principal: opts.principal ?? 1000,
+        dailyReturnBps: plan.dailyReturnBps,
         startedAt: opts.startedAt,
         endsAt: plus(opts.startedAt, durationDays * DAY),
       },
@@ -120,6 +121,24 @@ describe.skipIf(!hasDatabase)("plan accrual", () => {
   const reload = (id: string) =>
     testPrisma.subscription.findUniqueOrThrow({ where: { id } })
 
+
+  it("pays a running subscription the rate it started at, whatever the plan says now", async () => {
+    const start = at("2026-04-01T09:00:00Z")
+    const { subscription } = await makeSubscription({ startedAt: start, durationDays: 5 })
+
+    // The plan's rate quadruples after signup.
+    await testPrisma.plan.update({ where: { id: subscription.planId }, data: { dailyReturnBps: 400 } })
+    await accruePlanReturns(plus(start, 2 * DAY))
+
+    const rows = await payouts(subscription.id)
+    expect(rows.map((row) => row.amount.toFixed(2))).toEqual(["10.00", "10.00"])
+
+    const view = serializeSubscription(
+      await testPrisma.subscription.findUniqueOrThrow({ where: { id: subscription.id }, include: { plan: true } })
+    )
+    expect(view.dailyReturnPercent).toBe("1.00")
+    expect(view.dailyPayout).toBe("10.00")
+  })
   it("makes a 23:59 subscriber wait a full day", async () => {
     const start = at("2026-03-01T23:59:00Z")
     const { subscription } = await makeSubscription({ startedAt: start })

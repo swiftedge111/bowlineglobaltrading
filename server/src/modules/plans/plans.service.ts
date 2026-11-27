@@ -73,9 +73,11 @@ export function serializeSubscription(
     status: subscription.status,
     startedAt: subscription.startedAt,
     endsAt: subscription.endsAt,
+    /** The rate this subscription was opened at, e.g. `"2.50"`. */
+    dailyReturnPercent: (subscription.dailyReturnBps / 100).toFixed(2),
     /** The fixed amount each period pays, already rounded to cents. */
     dailyPayout: serialize(
-      bpsOf(subscription.principal, subscription.plan.dailyReturnBps)
+      bpsOf(subscription.principal, subscription.dailyReturnBps)
     ),
     paidPeriods,
     totalPeriods,
@@ -151,6 +153,8 @@ export async function subscribe(
           userId,
           planId: plan.id,
           principal,
+          // Locked in: later edits to the plan's rate do not reach this one.
+          dailyReturnBps: plan.dailyReturnBps,
           startedAt,
           endsAt,
         },
@@ -368,7 +372,7 @@ async function accrueSubscription(
   const { duePeriods, owed, matured } = accrualSchedule(subscription, now)
   if (owed === 0 && !matured) return null
 
-  const payout = bpsOf(subscription.principal, subscription.plan.dailyReturnBps)
+  const payout = bpsOf(subscription.principal, subscription.dailyReturnBps)
   const credited = round2(payout.mul(owed))
 
   // A compare-and-swap on the count already paid, the same guard `cancel`
@@ -535,11 +539,9 @@ export async function getAvailableForSubscription(
  *  - A plan with subscriptions is never deleted, only deactivated. Postgres
  *    would refuse the delete anyway (`onDelete: Restrict`), but failing with a
  *    foreign-key error rather than an explanation is not an answer.
- *  - `dailyReturnBps` and `durationDays` are edited freely, but the change
- *    applies to *future* accruals only. Live subscriptions carry their own
- *    `principal` and are paid from the plan they are attached to, so a rate cut
- *    reprices existing books from tonight's run onward. That is surfaced in the
- *    UI rather than hidden.
+ *  - `dailyReturnBps` and `durationDays` are edited freely and apply to new
+ *    subscriptions only. Each subscription stores the rate and end date it
+ *    started with, so a running one is paid exactly what it was promised.
  */
 
 /** Everything, including retired tiers — the admin list must show both. */
@@ -551,15 +553,42 @@ export async function adminListPlans() {
     },
   })
 
-  const active = await prisma.subscription.groupBy({
-    by: ["planId"],
-    where: { status: SubscriptionStatus.ACTIVE },
-    _count: { _all: true },
-    _sum: { principal: true },
-  })
+  const [running, paid] = await Promise.all([
+    prisma.subscription.findMany({
+      where: { status: SubscriptionStatus.ACTIVE },
+      select: {
+        planId: true,
+        principal: true,
+        dailyReturnBps: true,
+        startedAt: true,
+        endsAt: true,
+        accruedPeriods: true,
+      },
+    }),
+    prisma.subscription.groupBy({
+      by: ["planId"],
+      _sum: { totalAccrued: true },
+    }),
+  ])
+
+  const weekAhead = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
 
   return plans.map((plan) => {
-    const live = active.find((row) => row.planId === plan.id)
+    const live = running.filter((subscription) => subscription.planId === plan.id)
+    let principal = ZERO
+    let owed = ZERO
+    let maturingThisWeek = 0
+    let onOlderRate = 0
+
+    for (const subscription of live) {
+      principal = principal.add(subscription.principal)
+      // What is still to be paid out before each running book matures.
+      const { totalPeriods } = accrualSchedule(subscription, subscription.startedAt)
+      const remaining = Math.max(0, totalPeriods - subscription.accruedPeriods)
+      owed = owed.add(bpsOf(subscription.principal, subscription.dailyReturnBps).mul(remaining))
+      if (subscription.endsAt <= weekAhead) maturingThisWeek += 1
+      if (subscription.dailyReturnBps !== plan.dailyReturnBps) onOlderRate += 1
+    }
 
     return {
       ...serializePlan(plan),
@@ -567,8 +596,15 @@ export async function adminListPlans() {
       sortOrder: plan.sortOrder,
       subscriptions: {
         total: plan._count.subscriptions,
-        active: live?._count._all ?? 0,
-        activePrincipal: serialize(live?._sum.principal ?? ZERO),
+        active: live.length,
+        activePrincipal: serialize(round2(principal)),
+        /** Returns paid to date, across every subscription ever. */
+        paidOut: serialize(paid.find((row) => row.planId === plan.id)?._sum.totalAccrued ?? ZERO),
+        /** Returns still due to running subscriptions before they mature. */
+        owedToMaturity: serialize(round2(owed)),
+        maturingThisWeek,
+        /** Running subscriptions locked at a rate the plan no longer offers. */
+        onOlderRate,
       },
     }
   })

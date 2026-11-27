@@ -179,6 +179,7 @@ describe.skipIf(!hasDatabase)("concurrent money operations", () => {
           planId: plan.id,
           principal: toMoney(1000),
           status: "ACTIVE",
+          dailyReturnBps: plan.dailyReturnBps,
           startedAt: new Date(),
           endsAt: new Date(Date.now() + 30 * 86_400_000),
         },

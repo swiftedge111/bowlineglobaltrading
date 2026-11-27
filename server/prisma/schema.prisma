@@ -400,6 +400,10 @@ model Subscription {
   plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
 
   principal Decimal            @db.Decimal(18, 2)
+  /// The plan's daily rate when this subscription started, in basis points.
+  /// Payouts read this, not the plan, so editing a plan's rate changes what
+  /// new signups earn and never what a running subscription was promised.
+  dailyReturnBps Int
   status    SubscriptionStatus @default(ACTIVE)
   startedAt DateTime           @default(now())
   endsAt    DateTime

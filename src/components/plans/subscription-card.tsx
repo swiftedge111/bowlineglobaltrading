@@ -50,7 +50,7 @@ export function SubscriptionCard({
         </div>
         {active ? (
           <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100 tabular-nums">
-            {formatPercent(plan.dailyReturnPercent)} daily
+            {formatPercent(subscription.dailyReturnPercent)} daily
           </span>
         ) : status === "COMPLETED" ? (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-xs font-semibold text-primary-700 ring-1 ring-primary-100">
