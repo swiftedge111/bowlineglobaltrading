@@ -13,6 +13,7 @@ import type {
   AdminUserSort,
   Role,
   AdminWithdrawalRow,
+  AdminWithdrawalSummary,
   AuditLogEntry,
   CreateWithdrawalInput,
   DepositMethod,
@@ -45,6 +46,7 @@ import type {
   UsernameCheck,
   UserStatus,
   WithdrawalLimits,
+  WithdrawalMethod,
   WithdrawalRequest,
 } from "./types"
 
@@ -355,15 +357,30 @@ export const admin = {
       },
     }),
 
-  withdrawals: (params: { page?: number; limit?: number; status?: RequestStatus } = {}) =>
-    request<Paginated<AdminWithdrawalRow>>("/admin/withdrawals", {
-      query: params,
-    }),
+  withdrawals: (
+    params: {
+      page?: number
+      limit?: number
+      status?: RequestStatus
+      method?: WithdrawalMethod
+      search?: string
+    } = {}
+  ) => request<Paginated<AdminWithdrawalRow>>("/admin/withdrawals", { query: params }),
 
-  processWithdrawal: (id: string, action: "approve" | "reject", note?: string) =>
+  withdrawalSummary: () => request<AdminWithdrawalSummary>("/admin/withdrawals/summary"),
+
+  /** `payoutReference` is the bank reference or hash of the payment sent. */
+  processWithdrawal: (
+    id: string,
+    input: { action: "approve" | "reject"; note?: string; payoutReference?: string }
+  ) =>
     request<{ message: string }>(`/admin/withdrawals/${id}/process`, {
       method: "POST",
-      body: { action, ...(note ? { note } : {}) },
+      body: {
+        action: input.action,
+        ...(input.note ? { note: input.note } : {}),
+        ...(input.payoutReference ? { payoutReference: input.payoutReference } : {}),
+      },
     }),
 
   /** The raw PIN comes back exactly once — it is never retrievable again. */

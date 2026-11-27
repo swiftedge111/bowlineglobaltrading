@@ -4,7 +4,10 @@ import {
   Role,
   SubscriptionStatus,
   TxCategory,
+  TxStatus,
+  TxType,
   UserStatus,
+  WithdrawalMethod,
   type Prisma,
 } from "@prisma/client"
 import { Router } from "express"
@@ -424,29 +427,55 @@ adminRouter.post(
 
 /* ------------------------------------------------------------ withdrawals */
 
+const withdrawalFilters = paginationSchema.extend({
+  status: z.enum(RequestStatus).optional(),
+  method: z.enum(WithdrawalMethod).optional(),
+  search: z.string().trim().max(120).optional(),
+})
+
+/** Where a payout goes, normalised so the same wallet or account always matches. */
+function destinationKey(destination: Prisma.JsonValue): string | null {
+  if (!destination || typeof destination !== "object" || Array.isArray(destination)) return null
+  const value = destination as Record<string, unknown>
+  if (typeof value.walletAddress === "string") return `w:${value.walletAddress.trim().toLowerCase()}`
+  if (typeof value.accountNumber === "string") return `a:${value.accountNumber.replace(/[\s-]/g, "")}`
+  return null
+}
+
 adminRouter.get(
   "/withdrawals",
-  validate({
-    query: paginationSchema.extend({
-      status: z.enum(RequestStatus).optional(),
-    }),
-  }),
+  validate({ query: withdrawalFilters }),
   asyncHandler(async (req, res) => {
-    const query = req.query as unknown as {
-      page: number
-      limit: number
-      status?: RequestStatus
+    const query = req.query as unknown as z.infer<typeof withdrawalFilters>
+    const search = query.search?.trim()
+    const where: Prisma.WithdrawalRequestWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.method ? { method: query.method } : {}),
+      ...(search
+        ? {
+            OR: [
+              { user: { fullName: { contains: search, mode: "insensitive" } } },
+              { user: { email: { contains: search, mode: "insensitive" } } },
+              { user: { uid: { contains: search, mode: "insensitive" } } },
+              { destination: { path: ["walletAddress"], string_contains: search } },
+              { destination: { path: ["accountNumber"], string_contains: search } },
+            ],
+          }
+        : {}),
     }
-    const where: Prisma.WithdrawalRequestWhereInput = query.status
-      ? { status: query.status }
-      : {}
 
     const [items, total] = await Promise.all([
       prisma.withdrawalRequest.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        // The queue is first come, first served; history reads newest first.
+        orderBy:
+          query.status === RequestStatus.PENDING
+            ? [{ createdAt: "asc" }, { id: "asc" }]
+            : [{ createdAt: "desc" }, { id: "desc" }],
         include: {
           user: { select: { uid: true, email: true, fullName: true } },
+          reviewedBy: { select: { fullName: true } },
+          transaction: { select: { metadata: true } },
         },
         skip: (query.page - 1) * query.limit,
         take: query.limit,
@@ -454,20 +483,118 @@ adminRouter.get(
       prisma.withdrawalRequest.count({ where }),
     ])
 
+    // Signals for the reviewer, per client on this page: payouts already made
+    // and where to, and how much they have actually paid in.
+    const userIds = [...new Set(items.map((item) => item.userId))]
+    const [paidBefore, deposits] = userIds.length
+      ? await Promise.all([
+          prisma.withdrawalRequest.findMany({
+            where: { userId: { in: userIds }, status: RequestStatus.APPROVED },
+            select: { id: true, userId: true, destination: true },
+          }),
+          prisma.transaction.groupBy({
+            by: ["userId", "type"],
+            where: {
+              userId: { in: userIds },
+              category: TxCategory.DEPOSIT,
+              status: TxStatus.COMPLETED,
+            },
+            _sum: { amount: true },
+          }),
+        ])
+      : [[], []]
+
+    const depositedBy = new Map<string, Prisma.Decimal>()
+    for (const row of deposits) {
+      const sum = row._sum.amount ?? ZERO
+      const current = depositedBy.get(row.userId) ?? ZERO
+      depositedBy.set(row.userId, row.type === TxType.CREDIT ? current.add(sum) : current.sub(sum))
+    }
+
     paginated(
       res,
-      items.map((request) => ({
-        id: request.id,
-        user: request.user,
-        amount: serialize(request.amount),
-        fee: serialize(request.feeAmount),
-        method: request.method,
-        destination: request.destination,
-        status: request.status,
-        createdAt: request.createdAt,
-      })),
+      items.map((request) => {
+        const key = destinationKey(request.destination)
+        const others = paidBefore.filter((paid) => paid.userId === request.userId && paid.id !== request.id)
+        const deposited = depositedBy.get(request.userId) ?? ZERO
+        const metadata = request.transaction.metadata as Record<string, unknown> | null
+        return {
+          id: request.id,
+          user: request.user,
+          amount: serialize(request.amount),
+          fee: serialize(request.feeAmount),
+          total: serialize(request.amount.add(request.feeAmount)),
+          method: request.method,
+          destination: request.destination,
+          status: request.status,
+          reviewedBy: request.reviewedBy?.fullName ?? null,
+          reviewedAt: request.reviewedAt,
+          reviewNote: request.reviewNote,
+          payoutReference: typeof metadata?.payoutReference === "string" ? metadata.payoutReference : null,
+          signals: {
+            /** Approved withdrawals before this one. */
+            previousPayouts: others.length,
+            /** Never paid to this wallet or account before. */
+            newDestination: key !== null && !others.some((paid) => destinationKey(paid.destination) === key),
+            /** Net deposits over the account's life. */
+            deposited: serialize(deposited),
+            exceedsDeposits: request.amount.gt(deposited),
+          },
+          createdAt: request.createdAt,
+        }
+      }),
       buildPageMeta(query.page, query.limit, total)
     )
+  })
+)
+
+adminRouter.get(
+  "/withdrawals/summary",
+  asyncHandler(async (_req, res) => {
+    const now = new Date()
+    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const paid = (since: Date) =>
+      prisma.withdrawalRequest.aggregate({
+        where: { status: RequestStatus.APPROVED, reviewedAt: { gte: since } },
+        _count: { _all: true },
+        _sum: { amount: true, feeAmount: true },
+      })
+
+    const [pending, oldest, today, month, rejected] = await Promise.all([
+      prisma.withdrawalRequest.aggregate({
+        where: { status: RequestStatus.PENDING },
+        _count: { _all: true },
+        _sum: { amount: true, feeAmount: true },
+      }),
+      prisma.withdrawalRequest.findFirst({
+        where: { status: RequestStatus.PENDING },
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true },
+      }),
+      paid(startOfDay),
+      paid(monthAgo),
+      prisma.withdrawalRequest.count({
+        where: { status: RequestStatus.REJECTED, reviewedAt: { gte: monthAgo } },
+      }),
+    ])
+
+    ok(res, {
+      pending: {
+        count: pending._count._all,
+        /** What has to be sent out: client payouts, fees excluded. */
+        amount: serialize(pending._sum.amount ?? ZERO),
+        fees: serialize(pending._sum.feeAmount ?? ZERO),
+        oldestAt: oldest?.createdAt ?? null,
+      },
+      paidToday: { count: today._count._all, amount: serialize(today._sum.amount ?? ZERO) },
+      paid30d: {
+        count: month._count._all,
+        amount: serialize(month._sum.amount ?? ZERO),
+        fees: serialize(month._sum.feeAmount ?? ZERO),
+      },
+      rejected30d: rejected,
+    })
   })
 )
 
@@ -480,6 +607,7 @@ adminRouter.post(
       adminId: req.auth!.userId,
       action: req.body.action,
       note: req.body.note,
+      payoutReference: req.body.payoutReference,
       ip: clientIp(req),
     })
     ok(res, { message: `Withdrawal ${req.body.action}d.` })

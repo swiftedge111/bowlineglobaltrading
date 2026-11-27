@@ -57,10 +57,17 @@ export const createWithdrawalSchema = z
     }
   })
 
-export const processWithdrawalSchema = z.object({
-  action: z.enum(["approve", "reject"]),
-  note: z.string().trim().max(500).optional(),
-})
+export const processWithdrawalSchema = z
+  .object({
+    action: z.enum(["approve", "reject"]),
+    note: z.string().trim().max(500).optional(),
+    /** The bank transfer reference or transaction hash of the payout sent. */
+    payoutReference: z.string().trim().min(2).max(200).optional(),
+  })
+  .refine((body) => body.action === "approve" || body.payoutReference === undefined, {
+    message: "Only an approval takes a payout reference.",
+    path: ["payoutReference"],
+  })
 
 export type CreateWithdrawalInput = z.infer<typeof createWithdrawalSchema>
 export type ProcessWithdrawalInput = z.infer<typeof processWithdrawalSchema>

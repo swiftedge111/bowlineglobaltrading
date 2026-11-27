@@ -194,6 +194,11 @@ export async function processWithdrawal(params: {
   adminId: string
   action: "approve" | "reject"
   note?: string | undefined
+  /**
+   * Proof the money went out: a bank reference or transaction hash. Stored on
+   * the client's ledger entry, so it appears in their transaction details.
+   */
+  payoutReference?: string | undefined
   ip?: string | undefined
 }): Promise<void> {
   const request = await prisma.withdrawalRequest.findUnique({
@@ -212,7 +217,17 @@ export async function processWithdrawal(params: {
     if (approving) {
       // Flips the reservation into a settled deduction. Because balance is
       // derived from the ledger, nothing can silently restore it later.
-      await settle(request.transactionId, params.adminId, tx)
+      const settled = await settle(request.transactionId, params.adminId, tx)
+      if (params.payoutReference) {
+        const existing =
+          settled.metadata && typeof settled.metadata === "object" && !Array.isArray(settled.metadata)
+            ? settled.metadata
+            : {}
+        await tx.transaction.update({
+          where: { id: settled.id },
+          data: { metadata: { ...existing, payoutReference: params.payoutReference } },
+        })
+      }
     } else {
       await unwind(
         request.transactionId,
@@ -238,7 +253,11 @@ export async function processWithdrawal(params: {
     action: approving ? "withdrawal.approve" : "withdrawal.reject",
     targetType: "WithdrawalRequest",
     targetId: request.id,
-    after: { status: approving ? "APPROVED" : "REJECTED", note: params.note ?? null },
+    after: {
+      status: approving ? "APPROVED" : "REJECTED",
+      note: params.note ?? null,
+      ...(params.payoutReference ? { payoutReference: params.payoutReference } : {}),
+    },
     ip: params.ip,
   })
 

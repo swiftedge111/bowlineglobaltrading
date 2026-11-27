@@ -497,12 +497,36 @@ export interface AdminDepositSummary {
 export interface AdminWithdrawalRow {
   id: string
   user: QueueUser
+  /** What the client receives. */
   amount: string
   fee: string
+  /** `amount + fee`: what leaves their balance. */
+  total: string
   method: WithdrawalMethod
   destination: WithdrawalDestination
   status: RequestStatus
+  reviewedBy: string | null
+  reviewedAt: string | null
+  reviewNote: string | null
+  /** Bank reference or transaction hash recorded when it was paid. */
+  payoutReference: string | null
+  signals: {
+    /** Approved withdrawals before this one. */
+    previousPayouts: number
+    /** Never paid to this wallet or account before. */
+    newDestination: boolean
+    /** Net deposits over the account's life. */
+    deposited: string
+    exceedsDeposits: boolean
+  }
   createdAt: string
+}
+
+export interface AdminWithdrawalSummary {
+  pending: { count: number; amount: string; fees: string; oldestAt: string | null }
+  paidToday: { count: number; amount: string }
+  paid30d: { count: number; amount: string; fees: string }
+  rejected30d: number
 }
 
 export type PinStatus = "ACTIVE" | "USED" | "EXPIRED" | "REVOKED"

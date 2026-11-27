@@ -603,6 +603,8 @@ function metadataRows(tx: Transaction): Array<{ label: string; value: string }> 
       const bank = text(destination.bankName)
       rows.push({ label: "To account", value: `${bank ? `${bank} · ` : ""}•••• ${account.slice(-4)}` })
     }
+    const payout = text(data.payoutReference)
+    if (payout) rows.push({ label: "Payout reference", value: payout })
   }
 
   if (tx.category === "PLAN_PAYOUT") {
