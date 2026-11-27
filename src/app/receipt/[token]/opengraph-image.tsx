@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { API_BASE_URL } from "@/lib/api/base-url"
 import { company } from "@/lib/site"
 
-export const alt = `Payment receipt with the white ${company.name} logo`
+export const alt = `Payment receipt with the ${company.name} logo`
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
@@ -44,7 +44,7 @@ export default async function Image({
   const { token } = await params
   const [reference, logo] = await Promise.all([
     loadReference(token),
-    readFile(join(process.cwd(), "public/brand/bowline-logo-white-640.png")),
+    readFile(join(process.cwd(), "public/images/logo-options/01-bowline-knot.png")),
   ])
 
   return new ImageResponse(
@@ -57,8 +57,8 @@ export default async function Image({
           flexDirection: "column",
           justifyContent: "center",
           padding: "0 96px",
-          background: "#092739",
-          color: "#ffffff",
+          background: "#fdfdfd",
+          color: "#001652",
           fontFamily: "sans-serif",
         }}
       >
@@ -66,17 +66,17 @@ export default async function Image({
         <img
           src={`data:image/png;base64,${logo.toString("base64")}`}
           alt={company.name}
-          width={330}
-          height={91}
+          width={385}
+          height={164}
         />
 
         <div
           style={{
-            marginTop: 44,
+            marginTop: 12,
             fontSize: 22,
             letterSpacing: 6,
             textTransform: "uppercase",
-            color: "#b8d8e7",
+            color: "#0035e1",
             fontWeight: 700,
           }}
         >
@@ -95,7 +95,7 @@ export default async function Image({
         </div>
 
         {reference && (
-          <div style={{ marginTop: 26, fontSize: 28, color: "#c6dce5" }}>
+          <div style={{ marginTop: 26, fontSize: 28, color: "#374e60" }}>
             View the receipt for this completed transaction.
           </div>
         )}

@@ -3,11 +3,11 @@ import type { Metadata } from "next"
 import { company } from "@/lib/site"
 
 export const shareImage = {
-  url: "/og-image.jpg?v=2",
+  url: "/og-image.jpg?v=3",
   width: 1200,
   height: 630,
   type: "image/jpeg",
-  alt: `White ${company.name} logo on a dark background`,
+  alt: `${company.name} logo with a blue bowline knot on a white background`,
 } as const
 
 export const siteTitle = `${company.name} | ${company.tagline}`
