@@ -43,19 +43,17 @@ export function ResetPasswordForm() {
   // rather than after a round trip.
   if (!token) {
     return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
-        <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-amber-100">
-          <LinkIcon className="size-6 text-amber-600" />
+      <div className="rounded-2xl border border-primary-100 bg-linear-to-br from-primary-50 to-white p-5 sm:p-6">
+        <span className="flex size-12 items-center justify-center rounded-2xl bg-primary-700 text-white shadow-md shadow-primary-700/20">
+          <LinkIcon aria-hidden className="size-6" />
         </span>
-        <h2 className="mt-4 text-base font-bold text-amber-900">
+        <h2 className="mt-5 text-xl font-semibold tracking-tight text-secondary-900">
           This link is incomplete
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-amber-700">
-          It looks like the reset link was cut short — some email clients wrap
-          long links across lines. Request a fresh one and open it in a single
-          click.
+        <p className="mt-2 text-sm leading-relaxed text-secondary-600">
+          The reset link may have been split by your email app. Request a fresh link and open it directly from the message.
         </p>
-        <Button asChild variant="outline" className="mt-5">
+        <Button asChild variant="gradient" className="mt-5 w-full sm:w-auto">
           <Link href="/forgot-password">Request a new link</Link>
         </Button>
       </div>
@@ -64,18 +62,18 @@ export function ResetPasswordForm() {
 
   if (done) {
     return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-        <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-100">
-          <CheckCircle2 className="size-6 text-emerald-600" />
+      <div className="rounded-2xl border border-emerald-200 bg-linear-to-br from-emerald-50 to-white p-5 sm:p-6">
+        <span className="flex size-12 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-700/20">
+          <CheckCircle2 aria-hidden className="size-6" />
         </span>
-        <h2 className="mt-4 text-base font-bold text-emerald-900">
+        <h2 className="mt-5 text-xl font-semibold tracking-tight text-secondary-900">
           Password updated
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-emerald-700">
+        <p className="mt-2 text-sm leading-relaxed text-secondary-600">
           For your security, every device that was signed in has been signed
           out. Use your new password to sign back in.
         </p>
-        <Button asChild variant="gradient" className="mt-5">
+        <Button asChild variant="gradient" className="mt-5 w-full sm:w-auto">
           <Link href="/login">Go to sign in</Link>
         </Button>
       </div>

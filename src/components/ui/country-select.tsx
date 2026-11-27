@@ -37,6 +37,7 @@ export function CountrySelect({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const rootRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   const selected = findCountry(value)
@@ -58,7 +59,10 @@ export function CountrySelect({
       if (!rootRef.current?.contains(event.target as Node)) close()
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close()
+      if (event.key === "Escape") {
+        close()
+        buttonRef.current?.focus()
+      }
     }
 
     document.addEventListener("pointerdown", onPointerDown)
@@ -78,23 +82,27 @@ export function CountrySelect({
   function choose(code: string) {
     onChange(code)
     close()
+    buttonRef.current?.focus()
   }
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className={variant === "full" ? "relative" : undefined}>
       <button
+        ref={buttonRef}
         id={id}
         type="button"
         disabled={disabled}
         onClick={() => (open ? close() : setOpen(true))}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-describedby={invalid ? `${id}-error` : undefined}
+        aria-label={variant === "dial" ? `Phone country code${selected ? `, ${selected.name} +${selected.callingCode}` : ""}` : undefined}
         className={cn(
           "flex items-center gap-1.5 text-sm outline-none transition-colors disabled:opacity-60",
           variant === "dial"
             ? "h-full shrink-0 rounded-l-xl border-r border-secondary-200 px-3 hover:bg-secondary-50 focus-visible:bg-secondary-50"
             : cn(
-                "h-13 w-full rounded-xl border-2 bg-white px-3.5 text-left focus:ring-4 focus:ring-primary-100",
+                "h-12 w-full rounded-xl border bg-white px-3.5 text-left focus:ring-4 focus:ring-primary-100",
                 invalid
                   ? "border-red-300 focus:border-red-500"
                   : "border-secondary-200 focus:border-primary-500"
@@ -132,10 +140,7 @@ export function CountrySelect({
 
       {open && (
         <div
-          className={cn(
-            "absolute z-30 mt-1 w-[min(20rem,calc(100vw-3rem))] overflow-hidden rounded-xl border border-secondary-200 bg-white shadow-xl",
-            variant === "dial" ? "left-0" : "left-0 right-0"
-          )}
+          className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-secondary-200 bg-white shadow-xl"
         >
           <div className="flex items-center gap-2 border-b border-secondary-100 px-3">
             <Search aria-hidden className="size-4 shrink-0 text-secondary-400" />
@@ -145,7 +150,7 @@ export function CountrySelect({
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search country or code"
               aria-label="Search countries"
-              className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-secondary-400"
+              className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-secondary-400"
               onKeyDown={(event) => {
                 // Enter picks the top hit, so a search can be completed without
                 // reaching for the mouse.

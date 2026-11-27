@@ -42,7 +42,11 @@ export function LoginForm() {
 
     const nextErrors = validateLogin(values)
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0) return
+    const [firstError] = Object.keys(nextErrors)
+    if (firstError) {
+      document.getElementById(firstError)?.focus()
+      return
+    }
 
     setSubmitting(true)
     setFormError(null)
@@ -81,7 +85,7 @@ export function LoginForm() {
     <form onSubmit={handleSubmit} noValidate>
       {formError && <FormAlert>{formError}</FormAlert>}
 
-      <div className="space-y-5">
+      <div className="space-y-4">
         <Input
           id="identifier"
           label="Email or username"
@@ -135,7 +139,6 @@ export function LoginForm() {
 
         <Button
           type="submit"
-          variant="gradient"
           size="lg"
           className="w-full"
           disabled={submitting}
@@ -147,8 +150,8 @@ export function LoginForm() {
             </>
           ) : (
             <>
-              Sign In
-              <ArrowRight className="transition-transform group-hover/button:translate-x-0.5" />
+              Sign in
+              <ArrowRight aria-hidden className="motion-safe:transition-transform motion-safe:group-hover/button:translate-x-0.5" />
             </>
           )}
         </Button>

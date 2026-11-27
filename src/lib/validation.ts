@@ -76,6 +76,9 @@ export interface SignupValues {
   /** ISO 3166-1 alpha-2. */
   country: string
   phone: string
+  contactPhone: string
+  /** ISO 3166-1 alpha-2 selected for the separate contact number. */
+  contactPhoneCountry: string
   password: string
   confirmPassword: string
   terms: boolean
@@ -116,6 +119,14 @@ export function validateSignup(values: SignupValues): Errors<SignupValues> {
     errors.phone = "Select your country first."
   } else if (!toE164(values.phone, values.country)) {
     errors.phone = "Enter a valid phone number for the country you selected."
+  }
+
+  if (!values.contactPhone.trim()) {
+    errors.contactPhone = "Enter a WhatsApp or Telegram contact number."
+  } else if (!values.contactPhoneCountry.trim()) {
+    errors.contactPhone = "Select the country code for your contact number."
+  } else if (!toE164(values.contactPhone, values.contactPhoneCountry)) {
+    errors.contactPhone = "Enter a valid contact number for the country selected."
   }
 
   if (!values.password) {

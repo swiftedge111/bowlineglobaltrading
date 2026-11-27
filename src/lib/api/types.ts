@@ -83,6 +83,8 @@ export interface RegisterInput {
   country: string
   /** E.164. Required since phone became mandatory at signup. */
   phone: string
+  /** E.164 WhatsApp / Telegram contact number. Required for new accounts. */
+  contactPhone: string
   password: string
   acceptedTerms: true
 }
@@ -333,6 +335,13 @@ export interface AdminUserDetail {
     username: string
     fullName: string
     phone: string | null
+    contactPhone: string | null
+    /** ISO 3166-1 alpha-2 country of residence. */
+    country: string | null
+    /** Server-derived registration network address. */
+    signupIp: string | null
+    /** Best-effort ISO-2 country inferred from the registration IP. */
+    signupCountry: string | null
     role: Role
     status: UserStatus
     lastLoginAt: string | null

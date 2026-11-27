@@ -7,6 +7,7 @@ import {
   ArrowRight,
   AtSign,
   Check,
+  Copy,
   Eye,
   EyeOff,
   Loader2,
@@ -47,6 +48,8 @@ const EMPTY: SignupValues = {
   // never something inferred and hidden.
   country: "",
   phone: "",
+  contactPhone: "",
+  contactPhoneCountry: "",
   password: "",
   confirmPassword: "",
   terms: false,
@@ -80,6 +83,7 @@ export function SignupForm() {
     () => ""
   )
   const country = values.country || guessedCountry
+  const contactPhoneCountry = values.contactPhoneCountry || country
   const [errors, setErrors] = useState<Errors<SignupValues>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
@@ -105,7 +109,7 @@ export function SignupForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const nextErrors = validateSignup({ ...values, country })
+    const nextErrors = validateSignup({ ...values, country, contactPhoneCountry })
     setErrors(nextErrors)
 
     if (Object.keys(nextErrors).length > 0) {
@@ -122,6 +126,7 @@ export function SignupForm() {
       // Sent in E.164 so the stored value is canonical. Validation has already
       // passed at this point, so the fallback is unreachable.
       const phone = toE164(values.phone, country) ?? values.phone.trim()
+      const contactPhone = toE164(values.contactPhone, contactPhoneCountry) ?? values.contactPhone.trim()
 
       await register({
         fullName: values.fullName.trim(),
@@ -129,6 +134,7 @@ export function SignupForm() {
         username: values.username.trim(),
         country,
         phone,
+        contactPhone,
         password: values.password,
         acceptedTerms: true,
       })
@@ -146,6 +152,7 @@ export function SignupForm() {
           "username",
           "country",
           "phone",
+          "contactPhone",
           "password",
         ] as const) {
           if (fields[key]) mapped[key] = fields[key]
@@ -174,166 +181,191 @@ export function SignupForm() {
       {formError && <FormAlert>{formError}</FormAlert>}
 
       <div className="space-y-5">
-        <Input
-          id="fullName"
-          label="Full name"
-          icon={UserRound}
-          type="text"
-          autoComplete="name"
-          placeholder="Enter your full name"
-          value={values.fullName}
-          onChange={(e) => update("fullName")(e.target.value)}
-          error={errors.fullName}
-          valid={!errors.fullName && values.fullName.trim().length >= 3}
-        />
-
-        <Input
-          id="email"
-          label="Email address"
-          icon={Mail}
-          type="email"
-          autoComplete="email"
-          placeholder="you@example.com"
-          value={values.email}
-          onChange={(e) => update("email")(e.target.value)}
-          error={errors.email}
-          valid={!errors.email && EMAIL_RE.test(values.email.trim())}
-        />
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <div>
+        <fieldset className="min-w-0">
+          <legend className="mb-3 font-heading text-base font-semibold tracking-tight text-secondary-900">
+            Account details
+          </legend>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
             <Input
-              id="username"
-              label="Username"
-              icon={AtSign}
+              id="fullName"
+              label="Full name"
+              icon={UserRound}
               type="text"
-              autoComplete="username"
-              placeholder="Choose a username"
-              value={values.username}
-              onChange={(e) => update("username")(e.target.value)}
-              error={errors.username ?? unavailableMessage}
-              valid={
-                !errors.username &&
-                USERNAME_RE.test(values.username.trim()) &&
-                usernameState.status === "available"
-              }
+              autoComplete="name"
+              placeholder="Enter your full name"
+              value={values.fullName}
+              onChange={(e) => update("fullName")(e.target.value)}
+              error={errors.fullName}
+              valid={!errors.fullName && values.fullName.trim().length >= 3}
             />
-            <UsernameStatus
-              state={usernameState}
-              hasFieldError={Boolean(errors.username)}
-              onPick={(name) => update("username")(name)}
-            />
-          </div>
 
-          <div>
-            <label
-              htmlFor="country"
-              className="mb-2 block text-sm font-medium text-secondary-700"
-            >
-              Country of residence
-            </label>
-            <CountrySelect
-              id="country"
-              value={country}
-              onChange={(code) => update("country")(code)}
-              invalid={Boolean(errors.country)}
+            <Input
+              id="email"
+              label="Email address"
+              icon={Mail}
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={values.email}
+              onChange={(e) => update("email")(e.target.value)}
+              error={errors.email}
+              valid={!errors.email && EMAIL_RE.test(values.email.trim())}
+            />
+
+            <div className="sm:col-span-2">
+              <Input
+                id="username"
+                label="Username"
+                icon={AtSign}
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="Choose a username"
+                value={values.username}
+                onChange={(e) => update("username")(e.target.value)}
+                error={errors.username ?? unavailableMessage}
+                valid={
+                  !errors.username &&
+                  USERNAME_RE.test(values.username.trim()) &&
+                  usernameState.status === "available"
+                }
+              />
+              <UsernameStatus
+                state={usernameState}
+                hasFieldError={Boolean(errors.username)}
+                onPick={(name) => update("username")(name)}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <label htmlFor="country" className="mb-2 block text-sm font-medium text-secondary-700">
+                Country of residence <span className="text-primary-600">*</span>
+              </label>
+              <CountrySelect
+                id="country"
+                value={country}
+                onChange={(code) => update("country")(code)}
+                invalid={Boolean(errors.country)}
+                disabled={submitting}
+              />
+              {errors.country && <p id="country-error" className="mt-2 text-xs text-red-600">{errors.country}</p>}
+            </div>
+
+            <PhoneInput
+              id="phone"
+              label="Phone number"
+              country={country}
+              onCountryChange={(code) => update("country")(code)}
+              value={values.phone}
+              onChange={(next) => update("phone")(next)}
+              error={errors.phone}
+              valid={Boolean(toE164(values.phone, country))}
+              hint="For account and withdrawal updates."
               disabled={submitting}
             />
-            {errors.country && (
-              <p className="mt-2 text-xs text-red-600">{errors.country}</p>
-            )}
-          </div>
-        </div>
 
-        <PhoneInput
-          id="phone"
-          label="Phone number"
-          country={country}
-          onCountryChange={(code) => update("country")(code)}
-          value={values.phone}
-          onChange={(next) => update("phone")(next)}
-          error={errors.phone}
-          valid={Boolean(toE164(values.phone, country))}
-          hint="We use this to reach you about your account and withdrawals."
-          disabled={submitting}
-        />
-
-        <div>
-          <Input
-            id="password"
-            label="Password"
-            icon={Lock}
-            type={showPassword ? "text" : "password"}
-            autoComplete="new-password"
-            placeholder="Create a strong password"
-            value={values.password}
-            onChange={(e) => update("password")(e.target.value)}
-            error={errors.password}
-            trailing={
-              <PasswordToggle
-                shown={showPassword}
-                onToggle={() => setShowPassword((v) => !v)}
-                Icon={showPassword ? EyeOff : Eye}
+            <div className="sm:col-span-2">
+              <PhoneInput
+                id="contactPhone"
+                label="WhatsApp / Telegram contact number"
+                country={contactPhoneCountry}
+                onCountryChange={(code) => update("contactPhoneCountry")(code)}
+                value={values.contactPhone}
+                onChange={(next) => update("contactPhone")(next)}
+                labelAction={(
+                  <button
+                    type="button"
+                    onClick={() => {
+                      update("contactPhone")(values.phone)
+                      update("contactPhoneCountry")(country)
+                    }}
+                    className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-primary-700 hover:bg-primary-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-700"
+                  >
+                    <Copy aria-hidden className="size-3.5" /> Same as phone
+                  </button>
+                )}
+                error={errors.contactPhone}
+                valid={Boolean(toE164(values.contactPhone, contactPhoneCountry))}
+                hint="Required for account and support messages."
+                disabled={submitting}
               />
-            }
-          />
-          <PasswordStrength password={values.password} />
-        </div>
+            </div>
+          </div>
+        </fieldset>
 
-        <Input
-          id="confirmPassword"
-          label="Confirm password"
-          icon={Lock}
-          type={showConfirm ? "text" : "password"}
-          autoComplete="new-password"
-          placeholder="Re-enter your password"
-          value={values.confirmPassword}
-          onChange={(e) => update("confirmPassword")(e.target.value)}
-          error={errors.confirmPassword}
-          valid={
-            !errors.confirmPassword &&
-            values.confirmPassword.length > 0 &&
-            values.confirmPassword === values.password
-          }
-          trailing={
-            <PasswordToggle
-              shown={showConfirm}
-              onToggle={() => setShowConfirm((v) => !v)}
-              Icon={showConfirm ? EyeOff : Eye}
+        <fieldset className="min-w-0">
+          <legend className="mb-3 w-full border-t border-secondary-200 pt-4 font-heading text-base font-semibold tracking-tight text-secondary-900">
+            Password setup
+          </legend>
+          <div className="grid grid-cols-1 items-start gap-x-4 gap-y-3.5 sm:grid-cols-2">
+            <Input
+              id="password"
+              label="Password"
+              icon={Lock}
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              placeholder="Create password"
+              value={values.password}
+              onChange={(e) => update("password")(e.target.value)}
+              error={errors.password}
+              trailing={
+                <PasswordToggle
+                  shown={showPassword}
+                  onToggle={() => setShowPassword((v) => !v)}
+                  Icon={showPassword ? EyeOff : Eye}
+                />
+              }
             />
-          }
-        />
 
-        <Checkbox
-          id="terms"
-          checked={values.terms}
-          onChange={(e) => update("terms")(e.target.checked)}
-          error={errors.terms}
-        >
-          I agree to the{" "}
-          <Link
-            href="/#faq"
-            className="font-semibold text-primary-600 underline-offset-4 hover:underline"
+            <Input
+              id="confirmPassword"
+              label="Confirm password"
+              icon={Lock}
+              type={showConfirm ? "text" : "password"}
+              autoComplete="new-password"
+              placeholder="Re-enter it"
+              value={values.confirmPassword}
+              onChange={(e) => update("confirmPassword")(e.target.value)}
+              error={errors.confirmPassword}
+              valid={
+                !errors.confirmPassword &&
+                values.confirmPassword.length > 0 &&
+                values.confirmPassword === values.password
+              }
+              trailing={
+                <PasswordToggle
+                  shown={showConfirm}
+                  onToggle={() => setShowConfirm((v) => !v)}
+                  Icon={showConfirm ? EyeOff : Eye}
+                  label="password confirmation"
+                />
+              }
+            />
+          </div>
+          <PasswordStrength password={values.password} />
+        </fieldset>
+
+        <div className="rounded-xl border border-secondary-200 bg-secondary-50 p-3.5">
+          <Checkbox
+            id="terms"
+            checked={values.terms}
+            onChange={(e) => update("terms")(e.target.checked)}
+            error={errors.terms}
           >
-            Terms of Service
-          </Link>{" "}
-          and{" "}
+            I agree to the Terms of Service and Risk Disclosure, and confirm I am at least 18 years old.
+          </Checkbox>
           <Link
             href="/#risk-disclosure"
-            className="font-semibold text-primary-600 underline-offset-4 hover:underline"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 ml-8 inline-block text-sm font-semibold text-primary-700 underline underline-offset-4"
           >
-            Risk Disclosure
+            Read the Risk Disclosure<span className="sr-only"> (opens in a new tab)</span>
           </Link>
-          , and confirm I am at least 18 years old.
-        </Checkbox>
+        </div>
 
-        <Button
-          type="submit"
-          variant="gradient"
-          size="lg"
-          className="w-full"
-          disabled={submitting}
-        >
+        <Button type="submit" size="lg" className="w-full" disabled={submitting}>
           {submitting ? (
             <>
               <span className="size-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -341,8 +373,8 @@ export function SignupForm() {
             </>
           ) : (
             <>
-              Create Account
-              <ArrowRight className="transition-transform group-hover/button:translate-x-0.5" />
+              Create account
+              <ArrowRight aria-hidden className="motion-safe:transition-transform motion-safe:group-hover/button:translate-x-0.5" />
             </>
           )}
         </Button>

@@ -21,6 +21,7 @@ export function PhoneInput({
   error,
   valid,
   hint,
+  labelAction,
   disabled,
 }: {
   id: string
@@ -32,22 +33,23 @@ export function PhoneInput({
   error?: string
   valid?: boolean
   hint?: string
+  labelAction?: React.ReactNode
   disabled?: boolean
 }) {
   const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined
 
   return (
     <div>
-      <label
-        htmlFor={id}
-        className="mb-2 block text-sm font-medium text-secondary-700"
-      >
-        {label}
-      </label>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <label htmlFor={id} className="block text-sm font-medium text-secondary-700">
+          {label} <span className="text-primary-600">*</span>
+        </label>
+        {labelAction}
+      </div>
 
       <div
         className={cn(
-          "flex h-13 items-stretch overflow-hidden rounded-xl border-2 bg-white transition-colors focus-within:ring-4",
+          "relative flex h-12 items-stretch rounded-xl border bg-white transition-colors focus-within:ring-4",
           error
             ? "border-red-300 focus-within:border-red-500 focus-within:ring-red-100"
             : valid
@@ -70,11 +72,12 @@ export function PhoneInput({
           autoComplete="tel-national"
           placeholder="801 234 5678"
           value={value}
+          required
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={Boolean(error)}
           aria-describedby={describedBy}
-          className="w-full bg-transparent px-3.5 text-sm outline-none placeholder:text-secondary-400 disabled:opacity-60"
+          className="min-w-0 flex-1 bg-transparent px-3.5 text-sm outline-none placeholder:text-secondary-400 disabled:opacity-60"
         />
       </div>
 

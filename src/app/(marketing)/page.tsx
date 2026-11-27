@@ -3,8 +3,8 @@ import type { Metadata } from "next"
 import { baseOpenGraph } from "@/lib/seo"
 import { StructuredData } from "@/components/site/structured-data"
 import { Hero } from "@/components/home/hero"
-import { Ticker } from "@/components/home/ticker"
-import { TrustedBy } from "@/components/home/trusted-by"
+import { InstrumentDirectory } from "@/components/home/instrument-directory"
+import { AccountTour } from "@/components/home/account-tour"
 import { Markets } from "@/components/home/markets"
 import { LiveMarkets } from "@/components/home/live-markets"
 import { Features } from "@/components/home/features"
@@ -32,8 +32,8 @@ export default function Home() {
     <>
       <StructuredData />
       <Hero />
-      <Ticker />
-      <TrustedBy />
+      <InstrumentDirectory />
+      <AccountTour />
       <Markets />
       <LiveMarkets />
       <Features />

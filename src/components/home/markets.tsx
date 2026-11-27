@@ -1,75 +1,59 @@
-import { ArrowRight } from "lucide-react"
-import Link from "next/link"
+import Image from "next/image"
+import { ArrowDown } from "lucide-react"
 
 import { Section } from "@/components/site/section"
-import { SectionHeading } from "@/components/site/section-heading"
-import { Reveal } from "@/components/site/reveal"
-import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { markets } from "@/lib/site"
 
 export function Markets() {
   return (
-    <Section
-      id="markets"
-      className="bg-linear-to-br from-primary-50 via-white to-blue-50"
-    >
-      <Reveal>
-        <SectionHeading
-          title="Four markets. One account."
-          description="Move between currencies, digital assets, equities and commodities without ever splitting your capital across platforms."
+    <Section id="markets" aria-labelledby="markets-title" className="bg-secondary-50">
+      <div className="grid items-center gap-8 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
+        <div className="min-w-0">
+          <h2 id="markets-title" className="text-4xl leading-[1.04] font-semibold tracking-[-0.055em] text-secondary-900 sm:text-5xl xl:text-6xl">
+            Compare the <span className="font-serif font-normal text-primary-600 italic">markets.</span>
+          </h2>
+          <p className="mt-4 max-w-md leading-relaxed text-secondary-600">
+            Explore what you can trade on Bowline and how pricing varies across asset classes.
+          </p>
+          <table className="mt-7 w-full border-collapse text-left">
+            <caption className="sr-only">Bowline instruments and pricing by asset class</caption>
+            <thead className="border-b border-secondary-300 text-xs tracking-wide text-secondary-500">
+              <tr>
+                <th scope="col" className="pb-3 font-medium">Market &amp; coverage</th>
+                <th scope="col" className="pb-3 text-right font-medium">Pricing</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-secondary-200 border-b border-secondary-200">
+              {markets.map((market) => (
+                <tr key={market.slug}>
+                  <th scope="row" className="py-3.5 pr-2">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <span className="hidden size-10 shrink-0 items-center justify-center rounded-full border border-secondary-200 bg-white text-primary-700 min-[380px]:flex">
+                        <market.icon aria-hidden className="size-4.5" />
+                      </span>
+                      <div>
+                        <span className="block text-sm font-semibold text-secondary-900 sm:text-base">{market.name}</span>
+                        <span className="mt-0.5 block text-xs font-normal text-secondary-600">{market.instruments}</span>
+                      </div>
+                    </div>
+                  </th>
+                  <td className="py-3.5 text-right text-sm font-medium text-secondary-900">{market.spread}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <a href="#live-markets" className="mt-4 inline-flex min-h-11 items-center gap-2 font-semibold text-primary-700 hover:underline">
+            Explore market prices <ArrowDown aria-hidden className="size-4" />
+          </a>
+        </div>
+        <Image
+          src="/images/sections/market-watchlist.webp"
+          alt="Illustrated watchlist showing the euro, Bitcoin, and gold."
+          width={1536}
+          height={1024}
+          sizes="(min-width: 1280px) 550px, (min-width: 1024px) 45vw, 100vw"
+          className="w-full rounded-2xl border border-secondary-200"
         />
-      </Reveal>
-
-      <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
-        {markets.map((market, i) => (
-          <Reveal key={market.slug} delay={i * 0.08}>
-            <Card className="flex h-full flex-col">
-              {/* Hover tint */}
-              <div
-                aria-hidden
-                className={`absolute inset-0 rounded-2xl bg-linear-to-br ${market.gradient} opacity-0 transition-opacity duration-300 group-hover:opacity-[0.04]`}
-              />
-
-              <div className="relative z-10 flex flex-1 flex-col">
-                <div
-                  className={`mb-5 flex size-14 items-center justify-center rounded-xl bg-linear-to-br ${market.gradient} shadow-lg transition-transform duration-300 group-hover:scale-110`}
-                >
-                  <market.icon className="size-7 text-white" />
-                </div>
-
-                <CardTitle className="mb-3 transition-colors group-hover:text-primary-600">
-                  {market.name}
-                </CardTitle>
-                <CardDescription className="flex-1">
-                  {market.description}
-                </CardDescription>
-
-                <dl className="mt-6 space-y-2 border-t border-secondary-100 pt-4 text-sm">
-                  <div className="flex items-center justify-between">
-                    <dt className="text-secondary-500">Instruments</dt>
-                    <dd className="font-semibold text-secondary-900">
-                      {market.instruments}
-                    </dd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <dt className="text-secondary-500">Pricing</dt>
-                    <dd className="font-semibold text-primary-600">
-                      {market.spread}
-                    </dd>
-                  </div>
-                </dl>
-
-                <Link
-                  href="#live-markets"
-                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-primary-600 transition-colors hover:text-primary-700"
-                >
-                  See live prices
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </div>
-            </Card>
-          </Reveal>
-        ))}
       </div>
     </Section>
   )

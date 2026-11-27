@@ -106,16 +106,18 @@ export function PasswordToggle({
   shown,
   onToggle,
   Icon,
+  label = "password",
 }: {
   shown: boolean
   onToggle: () => void
   Icon: LucideIcon
+  label?: string
 }) {
   return (
     <button
       type="button"
       onClick={onToggle}
-      aria-label={shown ? "Hide password" : "Show password"}
+      aria-label={`${shown ? "Hide" : "Show"} ${label}`}
       className="rounded-md p-0.5 text-secondary-400 transition-colors hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
     >
       <Icon className="size-5" />

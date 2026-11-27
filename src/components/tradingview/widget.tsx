@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -13,6 +13,7 @@ interface TradingViewWidgetProps {
   className?: string
   /** Overrides for the loading placeholder */
   skeletonClassName?: string
+  fallback?: ReactNode
 }
 
 /** TradingView can take ~10s on a cold cache; never hold the skeleton past this. */
@@ -35,13 +36,30 @@ export function TradingViewWidget({
   config,
   className,
   skeletonClassName,
+  fallback,
 }: TradingViewWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [loaded, setLoaded] = useState(false)
+  const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading")
+  const hasFallback = fallback != null
 
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
+
+    const reveal = () => setStatus("ready")
+    const timedOut = () => setStatus(hasFallback ? "unavailable" : "ready")
+    const timer = window.setTimeout(timedOut, LOAD_TIMEOUT_MS)
+    const onLoad = () => {
+      window.clearTimeout(timer)
+      reveal()
+    }
+    const onError = (event: Event) => {
+      if (hasFallback && event.target instanceof HTMLScriptElement) {
+        window.clearTimeout(timer)
+        setStatus("unavailable")
+      }
+    }
+    container.addEventListener("error", onError, true)
 
     // Inject once. This guard must not short-circuit the watchers below, or
     // strict mode's second pass would leave the widget stuck hidden.
@@ -61,11 +79,11 @@ export function TradingViewWidget({
       container.appendChild(el)
     }
 
-    const reveal = () => setLoaded(true)
-
     // The iframe is created asynchronously by TradingView's script.
+    let watchedFrame: HTMLIFrameElement | null = null
     const watch = (iframe: HTMLIFrameElement) => {
-      iframe.addEventListener("load", reveal, { once: true })
+      watchedFrame = iframe
+      iframe.addEventListener("load", onLoad, { once: true })
     }
 
     const existing = container.querySelector("iframe")
@@ -80,18 +98,18 @@ export function TradingViewWidget({
     })
     observer.observe(container, { childList: true, subtree: true })
 
-    const timer = window.setTimeout(reveal, LOAD_TIMEOUT_MS)
-
     return () => {
       observer.disconnect()
       window.clearTimeout(timer)
+      container.removeEventListener("error", onError, true)
+      watchedFrame?.removeEventListener("load", onLoad)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [script])
+  }, [script, hasFallback])
 
   return (
     <div className={cn("relative", className)}>
-      {!loaded && (
+      {status === "loading" && (
         <Skeleton
           className={cn("absolute inset-0 h-full w-full", skeletonClassName)}
         />
@@ -100,9 +118,10 @@ export function TradingViewWidget({
         ref={containerRef}
         className={cn(
           "tradingview-widget-container h-full w-full transition-opacity duration-500",
-          loaded ? "opacity-100" : "opacity-0"
+          status === "ready" ? "opacity-100" : "invisible opacity-0"
         )}
       />
+      {status === "unavailable" && fallback}
     </div>
   )
 }

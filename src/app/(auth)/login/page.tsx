@@ -1,56 +1,32 @@
 import { Suspense } from "react"
 import type { Metadata } from "next"
-import Link from "next/link"
-import { company } from "@/lib/site"
 
-import { pageSeo } from "@/lib/seo"
-import { AuthShell } from "@/components/auth/auth-shell"
+import { AccountAccess } from "@/components/auth/account-access"
 import { LoginForm } from "@/components/auth/login-form"
 import { Skeleton } from "@/components/ui/skeleton"
+import { pageSeo } from "@/lib/seo"
+import { company } from "@/lib/site"
 
 export const metadata: Metadata = pageSeo({
   title: "Sign In",
-  description:
-    `Sign in to your ${company.name} account to manage your portfolio across forex, crypto, stocks and commodities.`,
+  description: `Sign in to your ${company.name} account to manage your portfolio.`,
   path: "/login",
 })
 
 export default function LoginPage() {
   return (
-    <AuthShell
-      title="Welcome back"
-      subtitle="Sign in to pick up where you left off and check on your open positions."
-      panelTitle="Your markets are open. Let's get back to work."
-      panelPoints={[
-        "Live positions and P&L the moment you sign in",
-        "Deposits and withdrawals from one balance",
-        "Segregated client funds and negative-balance protection",
-        "Support that answers 24 hours a day, 7 days a week",
-      ]}
-      footer={
-        <>
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/signup"
-            className="font-semibold text-primary-600 underline-offset-4 hover:underline"
-          >
-            Open one in minutes
-          </Link>
-        </>
-      }
-    >
-      {/* The form reads `?next=` to return you to the page you were bounced
-          off, which is only readable once the client takes over. */}
+    <AccountAccess mode="login">
+      {/* The form reads the return destination from the current URL. */}
       <Suspense fallback={<FormSkeleton />}>
         <LoginForm />
       </Suspense>
-    </AuthShell>
+    </AccountAccess>
   )
 }
 
 function FormSkeleton() {
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <Skeleton className="h-[74px] w-full rounded-xl" />
       <Skeleton className="h-[74px] w-full rounded-xl" />
       <Skeleton className="h-6 w-full" />

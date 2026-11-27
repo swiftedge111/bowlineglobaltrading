@@ -14,7 +14,6 @@ import {
   Rocket,
   ShieldCheck,
   TrendingUp,
-  Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react"
@@ -69,17 +68,15 @@ export const footerLinks: { title: string; links: NavLink[] }[] = [
   {
     title: "Markets",
     links: [
-      { label: "Forex", href: "#markets" },
-      { label: "Cryptocurrencies", href: "#markets" },
-      { label: "Stocks & Indices", href: "#markets" },
-      { label: "Commodities", href: "#markets" },
-      { label: "Live Prices", href: "#live-markets" },
+      { label: "Market Directory", href: "#market-directory" },
+      { label: "Market Comparison", href: "#markets" },
+      { label: "Market Watch", href: "#live-markets" },
     ],
   },
   {
     title: "Platform",
     links: [
-      { label: "Trading Tools", href: "#platform" },
+      { label: "Trading Workspace", href: "#platform" },
       { label: "Copy Trading", href: "#copy-trading" },
       { label: "Investment Plans", href: "#plans" },
       { label: "How It Works", href: "#how-it-works" },
@@ -88,9 +85,10 @@ export const footerLinks: { title: string; links: NavLink[] }[] = [
   {
     title: "Company",
     links: [
-      { label: `Why ${company.name}`, href: "#why-us" },
+      { label: "Why Bowline", href: "#why-us" },
       { label: "Testimonials", href: "#testimonials" },
       { label: "FAQ", href: "#faq" },
+      { label: "Risk Disclosure", href: "#risk-disclosure" },
       ...(supportContact ? [{ label: "Contact Support", href: supportContact.href }] : []),
     ],
   },
@@ -102,12 +100,6 @@ export const footerLinks: { title: string; links: NavLink[] }[] = [
       { label: "Reset Password", href: "/forgot-password" },
     ],
   },
-]
-
-export const legalLinks: NavLink[] = [
-  { label: "Terms of Service", href: "#faq" },
-  { label: "Privacy Policy", href: "#faq" },
-  { label: "Risk Disclosure", href: "#risk-disclosure" },
 ]
 
 /* -------------------------------------------------------------------------- */
@@ -310,41 +302,26 @@ export const toolBenefits: Feature[] = [
 /*  How it works                                                               */
 /* -------------------------------------------------------------------------- */
 
-export interface Step {
-  title: string
-  description: string
-  video: string
-  icon: LucideIcon
-}
-
-export const steps: Step[] = [
+export const steps = [
   {
-    title: "Register",
+    title: "Create your account",
     description:
-      "Open your account in a few clicks. All you need is an email address and a couple of minutes.",
-    video: "/videos/reg.mp4",
-    icon: Users,
+      "Fill in your contact details, pick a username, and choose a password.",
   },
   {
-    title: "Verify",
+    title: "Add funds",
     description:
-      "Confirm your identity once. It keeps your account secure and unlocks higher withdrawal limits.",
-    video: "/videos/verify.mp4",
-    icon: ShieldCheck,
+      "Choose a deposit method and check your account for payment confirmation.",
   },
   {
-    title: "Fund",
+    title: "Choose a plan",
     description:
-      "Deposit by bank transfer, card, crypto or digital wallet. Most deposits clear within minutes.",
-    video: "/videos/fund.mp4",
-    icon: Wallet,
+      "Compare plan terms and minimums before deciding how much to allocate.",
   },
   {
-    title: "Trade",
+    title: "Track your portfolio",
     description:
-      "Take your first position and track performance live from your portfolio dashboard.",
-    video: "/videos/trade.mp4",
-    icon: TrendingUp,
+      "Open your dashboard to see your balance, holdings, and performance.",
   },
 ]
 
@@ -386,7 +363,7 @@ export const copyTradingVideos: CopyTradingVideo[] = [
 export interface Plan {
   name: string
   dailyReturn: string
-  duration: string
+  durationDays: number
   minDeposit: string
   maxDeposit: string
   description: string
@@ -398,7 +375,7 @@ export const plans: Plan[] = [
   {
     name: "Starter",
     dailyReturn: "1.2%",
-    duration: "14 days",
+    durationDays: 14,
     minDeposit: "$250",
     maxDeposit: "$4,999",
     description:
@@ -414,7 +391,7 @@ export const plans: Plan[] = [
   {
     name: "Silver",
     dailyReturn: "1.8%",
-    duration: "21 days",
+    durationDays: 21,
     minDeposit: "$5,000",
     maxDeposit: "$24,999",
     description:
@@ -430,7 +407,7 @@ export const plans: Plan[] = [
   {
     name: "Gold",
     dailyReturn: "2.5%",
-    duration: "30 days",
+    durationDays: 30,
     minDeposit: "$25,000",
     maxDeposit: "$99,999",
     description:
@@ -448,7 +425,7 @@ export const plans: Plan[] = [
   {
     name: "Platinum",
     dailyReturn: "3.2%",
-    duration: "45 days",
+    durationDays: 45,
     minDeposit: "$100,000",
     maxDeposit: "Unlimited",
     description:
@@ -473,9 +450,6 @@ export interface Testimonial {
   name: string
   location: string
   initials: string
-  earnings: string
-  /** Progress-bar fill percentage */
-  progress: number
 }
 
 export const testimonials: Testimonial[] = [
@@ -485,8 +459,6 @@ export const testimonials: Testimonial[] = [
     name: "David Wilson",
     location: "California, USA",
     initials: "DW",
-    earnings: "$5,000",
-    progress: 60,
   },
   {
     quote:
@@ -494,8 +466,6 @@ export const testimonials: Testimonial[] = [
     name: "Sarah Lee",
     location: "London, UK",
     initials: "SL",
-    earnings: "$12,000",
-    progress: 80,
   },
   {
     quote:
@@ -503,8 +473,6 @@ export const testimonials: Testimonial[] = [
     name: "Raj Patel",
     location: "Mumbai, India",
     initials: "RP",
-    earnings: "$8,000",
-    progress: 70,
   },
 ]
 
@@ -547,61 +515,82 @@ export const depositMethods: DepositMethod[] = [
 /*  FAQ                                                                        */
 /* -------------------------------------------------------------------------- */
 
+export const faqTopics = ["Getting started", "Deposits & withdrawals", "Trading & risk"] as const
+
 export interface FaqItem {
   question: string
   answer: string
+  topic: (typeof faqTopics)[number]
+  link?: NavLink
 }
 
 export const faqs: FaqItem[] = [
   {
-    question: `How do I open an account with ${company.name}?`,
+    question: "How do I open an account?",
     answer:
-      "Click Open Account, enter your name, email and a password, then verify your email address. The whole process takes under two minutes. You'll be asked to complete identity verification before your first withdrawal, which unlocks higher limits and keeps your account secure.",
+      "Enter your name and contact details on the signup page, then choose a username and password. After signup, the welcome screen will guide you through setting up your account.",
+    topic: "Getting started",
+    link: { label: "Open an account", href: "/signup" },
   },
   {
     question: "What is the minimum deposit?",
     answer:
-      "The minimum to open a funded account is $250, which puts you on our Starter plan. There is no maximum — our Platinum tier is designed for deposits of $100,000 and above with bespoke terms.",
+      "The Deposit page in your account shows the current minimum deposit. Each investment plan has its own minimum amount, which you can compare in the Plans section.",
+    topic: "Deposits & withdrawals",
+    link: { label: "Compare plan minimums", href: "#plans" },
   },
   {
-    question: "Which markets can I trade?",
+    question: "Which markets can I follow?",
     answer:
-      "Over 1,000 instruments across four asset classes: forex (60+ currency pairs), cryptocurrencies (80+ digital assets), stocks and indices (700+), and commodities including gold, silver, oil and natural gas. All from a single account and a single balance.",
+      "Market Watch covers forex, cryptocurrencies, stocks and indices, and commodities. You can browse prices for instruments such as Bitcoin, EUR/USD, and gold.",
+    topic: "Trading & risk",
+    link: { label: "Visit Market Watch", href: "#live-markets" },
   },
   {
     question: "How do I deposit and withdraw funds?",
     answer:
-      "We accept bank transfer, credit and debit cards, cryptocurrency and digital wallets including PayPal, Cash App, Venmo and Zelle. Most deposits clear within minutes. Withdrawals are processed to the same method used to deposit, with a $10 minimum.",
+      "In Deposit, choose an available payment method and follow the payment instructions. In Withdraw, choose a bank account or crypto wallet as the destination and confirm the request with your withdrawal PIN.",
+    topic: "Deposits & withdrawals",
   },
   {
     question: "How long do withdrawals take?",
     answer:
-      "Crypto withdrawals typically settle within a few hours. Bank withdrawals take one to three business days depending on your institution. Gold and Platinum members receive priority and same-day processing respectively.",
+      "Your withdrawal shows as pending while the team reviews it. You can check its latest status from Withdraw or Transactions in your account.",
+    topic: "Deposits & withdrawals",
   },
   {
     question: "Are my funds safe?",
     answer:
-      "Client capital is held in segregated accounts separate from company funds. Digital assets are kept in cold storage, all data is encrypted in transit and at rest, and every account carries negative-balance protection so you can never lose more than you deposit.",
+      "Your account uses a password for sign-in and a PIN for withdrawal requests. Trading itself carries risk, including the potential loss of some or all of your invested capital.",
+    topic: "Trading & risk",
+    link: { label: "Read the risk disclosure", href: "#risk-disclosure" },
   },
   {
     question: "What is copy trading and how does it work?",
     answer:
-      "Copy trading lets you automatically mirror the positions of experienced traders on the platform. You choose who to follow based on their published track record, drawdown and risk score, allocate a portion of your capital, and their trades are replicated in your account proportionally. You can stop at any time.",
+      "Copy trading mirrors another trader’s positions. With proportional copying, each position uses the same share of the money you set aside as it does in the original strategy.",
+    topic: "Trading & risk",
+    link: { label: "See the copy trading example", href: "#copy-trading" },
   },
   {
     question: "Do I need trading experience to get started?",
     answer:
-      "No. Many of our members start with no prior experience. Copy trading lets you follow proven traders while you learn, our risk calculator sizes positions for you, and Gold and Platinum members get a dedicated account manager who walks them through their first trades.",
+      "You can browse markets and try the price calculator before opening an account. The calculator shows how a hypothetical price change affects the value of a position.",
+    topic: "Getting started",
+    link: { label: "Try the price calculator", href: "#platform" },
   },
   {
-    question: `What fees does ${company.name} charge?`,
+    question: "Where can I see withdrawal fees?",
     answer:
-      "Spreads start from 0.1 pips on major forex pairs and stocks trade commission-free. We charge nothing for deposits. Withdrawal network fees apply on crypto and are passed through at cost with no markup.",
+      "The Withdraw page shows the processing fee and the amount you would receive before you confirm a request.",
+    topic: "Deposits & withdrawals",
   },
   {
     question: "Is trading risky?",
     answer:
-      "Yes. Trading carries substantial risk and you can lose money. Prices in forex, crypto, stocks and commodities can move sharply and past performance never guarantees future results. Only trade capital you can afford to lose, and use the risk tools we provide on every position.",
+      "Yes. Prices can move sharply, and you may lose some or all of the money you invest. Future performance can differ from past results.",
+    topic: "Trading & risk",
+    link: { label: "Read the risk disclosure", href: "#risk-disclosure" },
   },
 ]
 

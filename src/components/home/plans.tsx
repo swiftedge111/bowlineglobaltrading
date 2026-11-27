@@ -1,143 +1,136 @@
-import Link from "next/link"
-import { Check, Info } from "lucide-react"
+"use client"
 
-import { cn } from "@/lib/utils"
+import { useId, useState } from "react"
+import Link from "next/link"
+import { ArrowRight, Check } from "lucide-react"
+
 import { Section } from "@/components/site/section"
-import { SectionHeading } from "@/components/site/section-heading"
-import { Reveal } from "@/components/site/reveal"
-import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { depositMethods, plans } from "@/lib/site"
+import { cn } from "@/lib/utils"
+
+const tickStep = Math.ceil(Math.max(...plans.map((plan) => plan.durationDays)) / 3)
+const termTicks = [0, tickStep, tickStep * 2, tickStep * 3]
+const termColumns = "grid grid-cols-[5.625rem_minmax(0,1fr)_2.5rem] items-center gap-2 px-2.5 sm:grid-cols-[7rem_minmax(0,1fr)_3.5rem] sm:gap-4 sm:px-4"
 
 export function Plans() {
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const groupName = useId()
+  const plan = plans[selectedIndex]
+  const details = [
+    { label: "Term", value: `${plan.durationDays} days` },
+    { label: "Daily return target", value: plan.dailyReturn },
+    { label: "Minimum", value: plan.minDeposit },
+    { label: "Maximum", value: plan.maxDeposit },
+  ]
+
   return (
-    <Section
-      id="plans"
-      className="bg-linear-to-b from-primary-50 to-white"
-    >
-      <Reveal>
-        <SectionHeading
-          title="Pick the tier that matches your capital"
-          description="Every plan opens the same four markets. What changes is your rate, your term, and how much of our team's attention comes with it."
-        />
-      </Reveal>
+    <Section id="plans" aria-labelledby="plans-title" className="bg-white">
+      <h2 id="plans-title" className="text-4xl leading-[1.05] font-semibold tracking-[-0.055em] text-secondary-900 sm:text-5xl xl:text-6xl">
+        Investment plans, <span className="inline-block font-serif font-normal text-primary-600 italic">side by side.</span>
+      </h2>
 
-      <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {plans.map((plan, i) => (
-          <Reveal key={plan.name} delay={i * 0.08}>
-            <Card
-              variant={plan.popular ? "featured" : "default"}
-              className="flex h-full flex-col"
-            >
-              {plan.popular && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary-600 px-3 py-1 text-[10px] font-bold tracking-wider text-white uppercase shadow-lg">
-                  Most popular
-                </span>
-              )}
+      <div className="mt-8 grid gap-5 lg:grid-cols-[1.18fr_1fr]">
+        <div className="flex min-w-0 items-center rounded-2xl border border-secondary-200 bg-secondary-50 p-4 sm:p-7 xl:p-9">
+          <fieldset className="w-full min-w-0" aria-describedby="plan-timeline-hint">
+            <legend className="font-heading text-xl font-semibold tracking-tight text-secondary-900 sm:text-2xl">
+              How long is each plan?
+            </legend>
+            <p id="plan-timeline-hint" className="mt-2 text-sm leading-relaxed text-secondary-600">
+              Select a plan to see its deposit range and features.
+            </p>
 
-              <div className="relative z-10 flex flex-1 flex-col">
-                <h3 className="font-heading text-xl font-bold text-secondary-900">
-                  {plan.name}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-secondary-600">
-                  {plan.description}
-                </p>
-
-                <div className="mt-6 flex items-baseline gap-1.5">
-                  <span
-                    className={cn(
-                      "tabular font-heading text-4xl font-bold tracking-tight",
-                      plan.popular ? "text-primary-600" : "text-secondary-900"
-                    )}
-                  >
-                    {plan.dailyReturn}
-                  </span>
-                  <span className="text-sm font-medium text-secondary-500">
-                    / day
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-secondary-500">
-                  over {plan.duration}
-                </p>
-
-                <dl className="mt-6 space-y-2 rounded-xl bg-secondary-50 p-4 text-sm">
-                  <div className="flex items-center justify-between">
-                    <dt className="text-secondary-500">Minimum</dt>
-                    <dd className="tabular font-semibold text-secondary-900">
-                      {plan.minDeposit}
-                    </dd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <dt className="text-secondary-500">Maximum</dt>
-                    <dd className="tabular font-semibold text-secondary-900">
-                      {plan.maxDeposit}
-                    </dd>
-                  </div>
-                </dl>
-
-                <ul className="mt-6 flex-1 space-y-2.5">
-                  {plan.features.map((feature) => (
-                    <li
-                      key={feature}
-                      className="flex items-start gap-2.5 text-sm text-secondary-600"
-                    >
-                      <Check className="mt-0.5 size-4 shrink-0 text-primary-600" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-
-                <Button
-                  asChild
-                  variant={plan.popular ? "gradient" : "outline"}
-                  className="mt-7 w-full"
-                >
-                  <Link href="/signup">Choose {plan.name}</Link>
-                </Button>
+            <div aria-hidden className={cn(termColumns, "mt-7 text-xs font-medium tabular-nums text-secondary-500")}>
+              <span>Plan</span>
+              <div className="flex justify-between">
+                {termTicks.map((day) => <span key={day}>{day}</span>)}
               </div>
-            </Card>
-          </Reveal>
-        ))}
-      </div>
-
-      {/* Deposit methods */}
-      <Reveal delay={0.1}>
-        <div className="mt-12 rounded-2xl border border-secondary-100 bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
-            <div>
-              <h3 className="text-base font-bold text-secondary-900">
-                Fund your account, your way
-              </h3>
-              <p className="mt-1.5 text-sm text-secondary-600">
-                No deposit fees on any method. Most clear within minutes.
-              </p>
+              <span className="text-right">Days</span>
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              {depositMethods.map((method) => (
-                <span
-                  key={method.label}
-                  className="inline-flex items-center gap-2 rounded-lg border border-secondary-200 bg-secondary-50 px-3.5 py-2 text-sm font-medium text-secondary-700"
-                >
-                  <method.icon className="size-4 text-primary-600" />
-                  {method.label}
-                </span>
+            <div className="mt-2 space-y-2">
+              {plans.map((option, index) => (
+                <label key={option.name} className="block cursor-pointer">
+                  <input
+                    type="radio"
+                    name={groupName}
+                    className="peer sr-only"
+                    checked={index === selectedIndex}
+                    aria-controls="plan-details"
+                    onChange={() => setSelectedIndex(index)}
+                  />
+                  <span className={cn(termColumns, "min-h-16 rounded-xl border border-secondary-200 bg-white py-2 transition-colors hover:border-primary-300 peer-checked:border-primary-600 peer-checked:bg-primary-50 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary-700")}>
+                    <span>
+                      <span className="block text-sm font-semibold text-secondary-900 sm:text-base">{option.name}</span>
+                      <span className="mt-0.5 block text-xs whitespace-nowrap tabular-nums text-secondary-600">Min. {option.minDeposit}</span>
+                    </span>
+                    <span aria-hidden className="h-2.5 overflow-hidden rounded-full bg-secondary-200">
+                      <span
+                        className={cn("block h-full rounded-full", index === selectedIndex ? "bg-primary-600" : "bg-secondary-400")}
+                        style={{ width: `${option.durationDays / (tickStep * 3) * 100}%` }}
+                      />
+                    </span>
+                    <span className="text-right text-sm font-semibold tabular-nums text-secondary-900">{option.durationDays} <span className="sr-only">days</span></span>
+                  </span>
+                </label>
               ))}
             </div>
-          </div>
+          </fieldset>
         </div>
-      </Reveal>
 
-      <Reveal delay={0.15}>
-        <p className="mx-auto mt-6 flex max-w-3xl items-start justify-center gap-2 text-center text-xs leading-relaxed text-secondary-500">
-          <Info className="mt-0.5 size-4 shrink-0" />
-          <span>
-            Return rates shown are illustrative targets, not guarantees. Trading
-            carries risk and your capital is at risk. Read the full risk
-            disclosure before investing.
-          </span>
-        </p>
-      </Reveal>
+        <article id="plan-details" aria-labelledby="selected-plan-name" className="flex min-w-0 flex-col rounded-2xl bg-linear-to-br from-secondary-900 to-primary-900 p-5 text-white sm:p-7 xl:p-9">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h3 id="selected-plan-name" className="text-3xl font-semibold tracking-tight sm:text-4xl">{plan.name}</h3>
+            {plan.popular && (
+              <span className="rounded-full border border-white/25 px-2.5 py-1 text-xs font-medium text-primary-100">Most popular</span>
+            )}
+          </div>
+          <p className="mt-2.5 max-w-md text-sm leading-relaxed text-primary-100">{plan.description}</p>
+
+          <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/15 bg-white/15">
+            {details.map(({ label, value }) => (
+              <div key={label} className="bg-secondary-900 px-3 py-2.5 sm:px-4">
+                <dt className="text-xs leading-snug text-primary-100">{label}</dt>
+                <dd className="mt-1 font-heading text-base font-semibold tabular-nums sm:text-xl">{value}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <ul role="list" aria-label={`Included with ${plan.name}`} className="mt-5 grid flex-1 content-start gap-x-4 gap-y-2.5 sm:grid-cols-2">
+            {plan.features.map((feature) => (
+              <li key={feature} className="flex items-start gap-2 text-sm leading-snug text-white">
+                <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-primary-300" />
+                {feature}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-6">
+            <Button asChild variant="inverse">
+              <Link href="/signup">Open an account <ArrowRight aria-hidden /></Link>
+            </Button>
+          </div>
+        </article>
+      </div>
+
+      <div className="mt-7 flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-y border-secondary-200 py-5">
+        <div>
+          <h3 className="text-base font-semibold text-secondary-900">Funding methods</h3>
+          <p className="mt-1 text-sm text-secondary-600">Your balance updates once your payment is confirmed.</p>
+        </div>
+        <ul role="list" className="flex flex-wrap gap-x-5 gap-y-3">
+          {depositMethods.map(({ label, icon: Icon }) => (
+            <li key={label} className="flex items-center gap-2 text-sm font-medium text-secondary-700">
+              <Icon aria-hidden className="size-4 shrink-0 text-primary-700" />
+              {label}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <p className="mt-4 text-sm leading-relaxed text-secondary-600">
+        Daily return targets are illustrative. Actual returns may vary and you may lose capital.{" "}
+        <a href="#risk-disclosure" className="font-medium text-primary-700 underline underline-offset-4">Read the risk disclosure</a>
+      </p>
     </Section>
   )
 }

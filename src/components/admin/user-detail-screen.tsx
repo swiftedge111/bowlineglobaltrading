@@ -41,6 +41,13 @@ import { cn } from "@/lib/utils"
 
 type Direction = "credit" | "debit"
 
+const countryNames = new Intl.DisplayNames(["en"], { type: "region" })
+
+function countryLabel(code: string | null) {
+  const normalized = code?.trim().toUpperCase()
+  return normalized ? countryNames.of(normalized) ?? normalized : "—"
+}
+
 /**
  * What an admin may write by hand — mirrors ADJUSTABLE_CATEGORIES on the API.
  *
@@ -391,6 +398,10 @@ export function AdminUserDetailScreen({ uid }: { uid: string }) {
           <Row label="UID" value={data.user.uid} copyable />
           <Row label="Username" value={data.user.username} />
           <Row label="Phone" value={data.user.phone ?? "—"} />
+          <Row label="WhatsApp / Telegram" value={data.user.contactPhone ?? "—"} />
+          <Row label="Country of residence" value={countryLabel(data.user.country)} />
+          <Row label="Signup IP" value={data.user.signupIp ?? "—"} />
+          <Row label="Signup IP country" value={countryLabel(data.user.signupCountry)} />
           <Row label="Role" value={data.user.role} />
           <Row
             label="Last seen"
@@ -407,6 +418,9 @@ export function AdminUserDetailScreen({ uid }: { uid: string }) {
             </dd>
           </div>
         </dl>
+        <p className="mt-3 text-xs leading-relaxed text-secondary-500">
+          Signup country is an approximate lookup based on the recorded IP.
+        </p>
       </section>
 
       <section className="mt-6 rounded-2xl border border-secondary-100/80 bg-white p-5 shadow-sm">

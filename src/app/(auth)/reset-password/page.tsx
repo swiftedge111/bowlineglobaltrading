@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { company } from "@/lib/site"
 
-import { AuthShell } from "@/components/auth/auth-shell"
+import { PasswordRecoveryShell } from "@/components/auth/password-recovery-shell"
 import { ResetPasswordForm } from "@/components/auth/reset-password-form"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -17,16 +17,12 @@ export const metadata: Metadata = {
 
 export default function ResetPasswordPage() {
   return (
-    <AuthShell
+    <PasswordRecoveryShell
       title="Set a new password"
-      subtitle="Choose something you haven't used elsewhere. You'll sign in with it straight after."
-      panelTitle="One strong password, and you're back to trading."
-      panelPoints={[
-        "This link works once and expires after 30 minutes",
-        "Every signed-in device is signed out when you finish",
-        "We store passwords hashed — never in plain text",
-        "Your positions and balance are untouched by a reset",
-      ]}
+      subtitle="Choose a strong password you haven’t used elsewhere. You’ll sign in with it after the update."
+      panelTitle="A fresh password. A clear path back in."
+      panelDescription="Use the one-time link from your email to finish securing your account."
+      steps={["Use your reset link", "Create a strong password", "Sign in again"]}
       footer={
         <>
           Remembered it after all?{" "}
@@ -44,7 +40,7 @@ export default function ResetPasswordPage() {
       <Suspense fallback={<FormSkeleton />}>
         <ResetPasswordForm />
       </Suspense>
-    </AuthShell>
+    </PasswordRecoveryShell>
   )
 }
 

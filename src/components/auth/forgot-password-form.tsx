@@ -52,30 +52,29 @@ export function ForgotPasswordForm() {
 
   if (sent) {
     return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-        <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-100">
-          <MailCheck className="size-6 text-emerald-600" />
+      <div className="rounded-2xl border border-primary-100 bg-linear-to-br from-primary-50 to-white p-5 sm:p-6">
+        <span className="flex size-12 items-center justify-center rounded-2xl bg-primary-700 text-white shadow-md shadow-primary-700/20">
+          <MailCheck aria-hidden className="size-6" />
         </span>
-        <h2 className="mt-4 text-base font-bold text-emerald-900">
+        <h2 className="mt-5 text-xl font-semibold tracking-tight text-secondary-900">
           Check your inbox
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-emerald-700">
+        <p className="mt-2 text-sm leading-relaxed text-secondary-600">
           If an account exists for{" "}
-          <span className="font-semibold">{email.trim()}</span>, a reset link is
-          on its way. It expires in 30 minutes.
+          <span className="font-semibold text-secondary-900">{email.trim()}</span>, a reset link is on its way.
         </p>
-        <p className="mt-3 text-xs text-emerald-600">
-          Nothing arrived? Check your spam folder, or{" "}
+        <p className="mt-4 rounded-xl border border-primary-100 bg-white/80 px-4 py-3 text-sm leading-relaxed text-secondary-600">
+          The link expires in 30 minutes. If it doesn’t arrive, check your spam folder or{" "}
           <button
             type="button"
             onClick={() => setSent(false)}
-            className="font-semibold underline underline-offset-2"
+            className="font-semibold text-primary-700 underline underline-offset-2"
           >
             try another address
           </button>
           .
         </p>
-        <Button asChild variant="outline" className="mt-5">
+        <Button asChild variant="outline" className="mt-5 w-full bg-white sm:w-auto">
           <Link href="/login">Back to sign in</Link>
         </Button>
       </div>
