@@ -1,0 +1,88 @@
+# Render Blueprint for the Bowline Global Trading API (server/).
+# Spec: https://render.com/docs/blueprint-spec
+#
+# Edit this file, not the dashboard. Render re-syncs it on every push to the
+# linked branch, and anything declared here overwrites dashboard edits.
+#
+# Secrets marked `sync: false` are asked for once, when the Blueprint is first
+# created. One added here later must be entered by hand under the service's
+# Environment tab.
+
+services:
+  - type: web
+    name: bowline-api
+    runtime: node
+    # Fixed at creation. Frankfurt is Render's closest region to the Supabase
+    # database in eu-west-1 (Ireland).
+    region: frankfurt
+    # Free is for staging and client review. It sleeps after 15 minutes idle
+    # and takes about a minute to wake. Before real customers, switch to a paid
+    # plan (e.g. `starter`) and move the migrate and lockdown steps into
+    # preDeployCommand, shown below. Pre-deploy is paid only.
+    plan: free
+    # Only changes under server/ (or to this file) trigger a deploy.
+    rootDir: server
+    autoDeployTrigger: commit
+
+    # NODE_ENV=production makes a plain `npm ci` skip devDependencies, which
+    # include prisma and typescript, and the build needs both.
+    #
+    # On the free plan, migrations and the Supabase lockdown run here, at the
+    # end of the build. A failed build therefore never reaches them, but a
+    # migration does run before the new version has passed its health check.
+    buildCommand: >-
+      npm ci --include=dev &&
+      npm run build &&
+      npm run prisma:deploy &&
+      npm run db:lockdown
+    # On a paid plan, use this instead and drop the last two steps above:
+    # preDeployCommand: npm run prisma:deploy && npm run db:lockdown
+    startCommand: npm start
+    # Checks the database too, so a version that can't reach Supabase is
+    # never switched to.
+    healthCheckPath: /api/v1/health
+
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+
+      # The frontend's public origin. CORS_ORIGINS must include APP_URL
+      # (comma-separated for more than one).
+      - key: APP_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      # Only when the API and frontend share a parent domain, e.g. `.example.com`.
+      # - key: COOKIE_DOMAIN
+      #   sync: false
+
+      # Supabase. Use the Session pooler connection string (port 5432).
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: proofs
+
+      # Generated once by Render: base64, 256-bit, and different from each other.
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # Bearer secret for POST /api/v1/internal/jobs/*. Copy the generated
+      # value into Supabase Vault when running prisma/supabase-cron.sql.
+      - key: CRON_SECRET
+        generateValue: true
+
+      # Email (Resend). The API will not start in production without the key.
+      - key: RESEND_API_KEY
+        sync: false
+      # e.g. "Bowline Global Trading <noreply@your-verified-domain>"
+      - key: EMAIL_FROM
+        sync: false
+      - key: SUPPORT_EMAIL
+        sync: false
