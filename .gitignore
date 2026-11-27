@@ -26,6 +26,8 @@ server/.env.*
 # Work in progress kept local
 design-preview/
 server/email-preview.ts
+server/data/*.mmdb
+server/data/*.mmdb.tmp
 
 # Test and debug output
 coverage/

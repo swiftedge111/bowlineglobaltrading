@@ -59,5 +59,6 @@ export function buildPageMeta(
  * behind one in production; `app.set('trust proxy', 1)` gates it.
  */
 export function clientIp(req: Request): string | undefined {
-  return req.ip ?? req.socket.remoteAddress ?? undefined
+  const ip = req.ip ?? req.socket.remoteAddress ?? undefined
+  return ip?.replace(/^::ffff:/i, "")
 }

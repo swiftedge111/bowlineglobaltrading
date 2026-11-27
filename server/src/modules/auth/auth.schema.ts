@@ -49,8 +49,8 @@ export const countrySchema = z
   .refine(isSupportedCountry, "Select your country of residence.")
 
 /**
- * Customer signup requires a valid phone and country. The admin seed does not
- * need either field, so the database columns are nullable.
+ * Customer signup requires valid country, phone and contact details. Admin
+ * seeds and accounts created before those fields existed may omit them.
  */
 export const registerSchema = z
   .object({
@@ -59,6 +59,7 @@ export const registerSchema = z
     username: usernameSchema,
     country: countrySchema,
     phone: z.string().trim().min(1, "Enter your phone number."),
+    contactPhone: z.string().trim().min(1, "Enter your WhatsApp or Telegram contact number."),
     password: passwordSchema,
     acceptedTerms: z.literal(true, {
       error: "You must accept the terms to open an account.",
@@ -69,14 +70,24 @@ export const registerSchema = z
     // reported by `min(1)`, and an unknown country by `countrySchema` — adding
     // "that number is not valid for the country" on top of either is a second
     // complaint about a field the user has not got to yet.
-    if (!value.phone.trim() || !isSupportedCountry(value.country)) return
-
-    if (!toE164(value.phone, value.country)) {
+    if (
+      value.phone.trim() &&
+      isSupportedCountry(value.country) &&
+      !toE164(value.phone, value.country)
+    ) {
       ctx.addIssue({
         code: "custom",
         // Attached to the field so the form marks the input, not the whole page.
         path: ["phone"],
         message: "Enter a valid phone number for the country you selected.",
+      })
+    }
+
+    if (value.contactPhone.trim() && !toE164(value.contactPhone, "")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["contactPhone"],
+        message: "Enter a valid international contact number.",
       })
     }
   })
@@ -85,6 +96,7 @@ export const registerSchema = z
   .transform((value) => ({
     ...value,
     phone: toE164(value.phone, value.country) ?? value.phone,
+    contactPhone: toE164(value.contactPhone, "") ?? value.contactPhone,
   }))
 
 export const loginSchema = z.object({

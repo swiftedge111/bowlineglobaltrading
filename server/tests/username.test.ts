@@ -128,6 +128,7 @@ describe.skipIf(!hasDatabase)("username availability", () => {
         username: "support",
         country: "NG",
         phone: "0803 123 4567",
+        contactPhone: "+234 803 123 4567",
         password: "Password123!",
         acceptedTerms: true,
       })
@@ -144,6 +145,7 @@ describe.skipIf(!hasDatabase)("username availability", () => {
         username: existing.username.toUpperCase(),
         country: "NG",
         phone: "0803 123 4568",
+        contactPhone: "+234 803 123 4568",
         password: "Password123!",
         acceptedTerms: true,
       })
@@ -168,6 +170,7 @@ describe.skipIf(!hasDatabase)("username availability", () => {
         username,
         country: "NG",
         phone: "0803 123 4569",
+        contactPhone: "+234 803 123 4569",
         password: "Password123!",
         acceptedTerms: true,
       })

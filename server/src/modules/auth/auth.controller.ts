@@ -16,7 +16,7 @@ function requestContext(req: Request) {
 }
 
 export async function register(req: Request, res: Response): Promise<void> {
-  const user = await authService.register(req.body)
+  const user = await authService.register(req.body, requestContext(req))
   created(res, { user })
 }
 

@@ -46,6 +46,7 @@ describe("registerSchema", () => {
     username: "jordan_a",
     country: "NG",
     phone: "0803 123 4567",
+    contactPhone: "+234 803 123 4570",
     password: "Password123!",
     acceptedTerms: true as const,
   }
@@ -75,6 +76,21 @@ describe("registerSchema", () => {
     expect(result.success).toBe(false)
     // Attached to the field, so the form can mark the input rather than the page.
     expect(result.error?.issues.some((i) => i.path.includes("phone"))).toBe(true)
+  })
+
+  /** WhatsApp/Telegram contact: required, international, stored in E.164. */
+  it("stores the contact number in E.164", () => {
+    const result = registerSchema.safeParse(base)
+    expect(result.success).toBe(true)
+    expect(result.data?.contactPhone).toBe("+2348031234570")
+  })
+
+  it("refuses a missing or non-international contact number", () => {
+    for (const contactPhone of ["", "0803 123 4567"]) {
+      const result = registerSchema.safeParse({ ...base, contactPhone })
+      expect(result.success).toBe(false)
+      expect(result.error?.issues.some((i) => i.path.includes("contactPhone"))).toBe(true)
+    }
   })
 
   it("refuses an unknown country", () => {

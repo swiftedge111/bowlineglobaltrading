@@ -18,6 +18,7 @@ import {
   ValidationError,
 } from "../../lib/errors.js"
 import { logger } from "../../lib/logger.js"
+import { countryForIp } from "../../lib/ip-country.js"
 import { prisma } from "../../lib/prisma.js"
 import { describeDevice } from "../../lib/user-agent.js"
 import {
@@ -80,7 +81,10 @@ async function allocateUid(): Promise<string> {
   throw new ConflictError("Could not allocate an account reference. Try again.")
 }
 
-export async function register(input: RegisterInput): Promise<PublicUser> {
+export async function register(
+  input: RegisterInput,
+  context: { ip?: string | undefined } = {}
+): Promise<PublicUser> {
   // These three rules are the ones `checkUsername` reports on. They must stay
   // identical: a name the signup form calls free and then refuses on submit is
   // worse than no live check at all.
@@ -120,6 +124,9 @@ export async function register(input: RegisterInput): Promise<PublicUser> {
       // parse, so there is nothing left to defend against here.
       phone: input.phone,
       country: input.country,
+      contactPhone: input.contactPhone,
+      signupIp: context.ip ?? null,
+      signupCountry: await countryForIp(context.ip),
       passwordHash: await hashPassword(input.password),
     },
   })
