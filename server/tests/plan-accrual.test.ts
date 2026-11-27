@@ -2,13 +2,17 @@ import { PinStatus, SubscriptionStatus, TxCategory } from "@prisma/client"
 import request from "supertest"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
-import { getBalance } from "../src/services/ledger.service.js"
+import { credit, getBalance } from "../src/services/ledger.service.js"
 import { issuePin, listPins, revokePin } from "../src/modules/pins/pins.service.js"
+import { getPerformance, getSummary } from "../src/modules/portfolio/portfolio.service.js"
 import {
   accruePlanReturns,
   accrualSchedule,
   cancelSubscription,
+  serializeSubscription,
+  subscribe,
 } from "../src/modules/plans/plans.service.js"
+import { toMoney } from "../src/lib/money.js"
 import { app } from "./helpers/api.js"
 import { cleanupTestUsers, createTestUser, hasDatabase, testPrisma } from "./helpers/db.js"
 
@@ -146,6 +150,79 @@ describe.skipIf(!hasDatabase)("plan accrual", () => {
     expect(after.totalAccrued.toFixed(2)).toBe("30.00")
     expect(after.lastAccruedOn?.toISOString()).toBe(plus(start, 3 * DAY).toISOString())
     expect((await getBalance(user.id)).toFixed(2)).toBe("30.00")
+  })
+
+  it("reports the payout schedule a subscriber sees", async () => {
+    const start = at("2026-05-01T09:00:00Z")
+    const { subscription } = await makeSubscription({ startedAt: start, durationDays: 3 })
+
+    const fresh = serializeSubscription(
+      await testPrisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+        include: { plan: true },
+      })
+    )
+    expect(fresh).toMatchObject({ dailyPayout: "10.00", paidPeriods: 0, totalPeriods: 3 })
+    expect(fresh.nextPayoutAt?.toISOString()).toBe(plus(start, DAY).toISOString())
+
+    await accruePlanReturns(plus(start, 2 * DAY))
+    const midway = serializeSubscription(
+      await testPrisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+        include: { plan: true },
+      })
+    )
+    expect(midway.paidPeriods).toBe(2)
+    expect(midway.nextPayoutAt?.toISOString()).toBe(plus(start, 3 * DAY).toISOString())
+
+    await accruePlanReturns(plus(start, 3 * DAY))
+    const done = serializeSubscription(
+      await testPrisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+        include: { plan: true },
+      })
+    )
+    expect(done).toMatchObject({ status: SubscriptionStatus.COMPLETED, paidPeriods: 3, nextPayoutAt: null })
+  })
+
+  it("counts principal in active plans toward account value, not balance", async () => {
+    const start = at("2026-06-01T09:00:00Z")
+    const { user, subscription } = await makeSubscription({ startedAt: start, principal: 2500 })
+
+    const running = await getSummary(user.id)
+    expect(running).toMatchObject({ balance: "0.00", inPlans: "2500.00", accountValue: "2500.00" })
+
+    await accruePlanReturns(plus(start, 30 * DAY))
+    expect((await reload(subscription.id)).status).toBe(SubscriptionStatus.COMPLETED)
+
+    // 30 days at 1% of $2,500 is $750, and the principal comes back.
+    const matured = await getSummary(user.id)
+    expect(matured).toMatchObject({ balance: "3250.00", inPlans: "0.00", accountValue: "3250.00" })
+  })
+
+  it("charts subscribing as a transfer, not a loss", async () => {
+    const user = await createTestUser()
+    const plan = await testPrisma.plan.create({
+      data: {
+        slug: `chart-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: "Chart Test",
+        dailyReturnBps: 100,
+        durationDays: 30,
+        minDeposit: 1,
+        description: "test",
+        features: [],
+      },
+    })
+    planIds.push(plan.id)
+
+    await credit({ userId: user.id, amount: toMoney(1000), category: TxCategory.DEPOSIT })
+    await subscribe(user.id, plan.slug, 600)
+
+    const summary = await getSummary(user.id)
+    expect(summary).toMatchObject({ balance: "400.00", inPlans: "600.00", accountValue: "1000.00" })
+
+    const { points } = await getPerformance(user.id, "7d")
+    expect(points.at(-1)?.value).toBe(summary.accountValue)
   })
 
   it("pays nothing more when run twice at the same moment", async () => {

@@ -1,4 +1,4 @@
-import { TxCategory, TxStatus, TxType } from "@prisma/client"
+import { SubscriptionStatus, TxCategory, TxStatus, TxType } from "@prisma/client"
 
 import type { PerformancePeriod } from "../../config/constants.js"
 import { ZERO, round2, serialize, type Money } from "../../lib/money.js"
@@ -29,6 +29,11 @@ export interface PortfolioSummary {
   balance: string
   available: string
   reserved: string
+  /** Principal currently locked in active plans. It is not part of `balance`. */
+  inPlans: string
+  /** `balance` plus `inPlans`: everything the client has with us. */
+  accountValue: string
+  /** Lifetime deposits and holding credits. */
   investedCapital: string
   profitEarned: string
   todayProfit: string
@@ -60,6 +65,7 @@ export async function getSummary(userId: string): Promise<PortfolioSummary> {
     yesterdayProfit,
     weekProfit,
     holdings,
+    activePlans,
   ] = await Promise.all([
     getBalanceSnapshot(userId),
     sumCategory(userId, [TxCategory.DEPOSIT, TxCategory.HOLDING]),
@@ -80,7 +86,13 @@ export async function getSummary(userId: string): Promise<PortfolioSummary> {
       where: { userId, archivedAt: null },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.subscription.aggregate({
+      where: { userId, status: SubscriptionStatus.ACTIVE },
+      _sum: { principal: true },
+    }),
   ])
+
+  const inPlans = round2(activePlans._sum.principal ?? ZERO)
 
   const holdingsValue = holdings.reduce<Money>(
     (total, holding) => total.add(holding.valueUsd),
@@ -95,6 +107,8 @@ export async function getSummary(userId: string): Promise<PortfolioSummary> {
     balance: serialize(snapshot.balance),
     available: serialize(snapshot.available),
     reserved: serialize(snapshot.reserved),
+    inPlans: serialize(inPlans),
+    accountValue: serialize(round2(snapshot.balance.add(inPlans))),
     investedCapital: serialize(deposited),
     profitEarned: serialize(profitEarned),
     todayProfit: serialize(todayProfit),
@@ -144,23 +158,24 @@ export async function getPerformance(
     from = addUtcDays(todayStart, -(PERIOD_DAYS[period] - 1))
   }
 
+  // The series tracks account value: cash plus principal in active plans.
+  // Principal moving into a plan and back out is a transfer within the
+  // account, so it is left out. Counting it would draw subscribing as a loss.
+  const settled = {
+    userId,
+    status: TxStatus.COMPLETED,
+    category: { not: TxCategory.PLAN_PRINCIPAL },
+  }
+
   const [opening, entries] = await Promise.all([
     // Everything settled before the window starts is the opening value.
     prisma.transaction.groupBy({
       by: ["type"],
-      where: {
-        userId,
-        status: TxStatus.COMPLETED,
-        createdAt: { lt: from },
-      },
+      where: { ...settled, createdAt: { lt: from } },
       _sum: { amount: true },
     }),
     prisma.transaction.findMany({
-      where: {
-        userId,
-        status: TxStatus.COMPLETED,
-        createdAt: { gte: from },
-      },
+      where: { ...settled, createdAt: { gte: from } },
       select: { type: true, amount: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     }),

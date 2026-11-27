@@ -60,6 +60,11 @@ export async function listPlans() {
 export function serializeSubscription(
   subscription: Subscription & { plan: Plan }
 ) {
+  // `totalPeriods` depends only on the term, so any clock reading will do.
+  const { totalPeriods } = accrualSchedule(subscription, subscription.startedAt)
+  const paidPeriods = Math.min(subscription.accruedPeriods, totalPeriods)
+  const nextPeriod = paidPeriods + 1
+
   return {
     id: subscription.id,
     plan: serializePlan(subscription.plan),
@@ -68,6 +73,21 @@ export function serializeSubscription(
     status: subscription.status,
     startedAt: subscription.startedAt,
     endsAt: subscription.endsAt,
+    /** The fixed amount each period pays, already rounded to cents. */
+    dailyPayout: serialize(
+      bpsOf(subscription.principal, subscription.plan.dailyReturnBps)
+    ),
+    paidPeriods,
+    totalPeriods,
+    /**
+     * When the next return is earned. It can be slightly in the past when the
+     * hourly job has not run yet; the payout is still owed and will be dated
+     * to this moment. Null once the plan has stopped paying.
+     */
+    nextPayoutAt:
+      subscription.status === SubscriptionStatus.ACTIVE && nextPeriod <= totalPeriods
+        ? periodEnd(subscription, nextPeriod)
+        : null,
   }
 }
 
