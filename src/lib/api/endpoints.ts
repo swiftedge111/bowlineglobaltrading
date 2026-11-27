@@ -2,6 +2,7 @@ import { request } from "./client"
 import type {
   DeviceSession,
   AdminDepositRow,
+  AdminDepositSummary,
   AdminPin,
   AdminPlan,
   AdminStats,
@@ -325,16 +326,33 @@ export const admin = {
       method: "POST",
     }),
 
-  deposits: (params: { page?: number; limit?: number; status?: RequestStatus } = {}) =>
-    request<Paginated<AdminDepositRow>>("/admin/deposits", { query: params }),
+  deposits: (
+    params: {
+      page?: number
+      limit?: number
+      status?: RequestStatus
+      method?: DepositMethod
+      search?: string
+    } = {}
+  ) => request<Paginated<AdminDepositRow>>("/admin/deposits", { query: params }),
+
+  depositSummary: () => request<AdminDepositSummary>("/admin/deposits/summary"),
 
   depositProof: (id: string) =>
-    request<{ url: string }>(`/admin/deposits/${id}/proof`),
+    request<{ url: string | null }>(`/admin/deposits/${id}/proof`),
 
-  processDeposit: (id: string, action: "approve" | "reject", note?: string) =>
+  /** `receivedAmount` credits what actually arrived instead of what was entered. */
+  processDeposit: (
+    id: string,
+    input: { action: "approve" | "reject"; note?: string; receivedAmount?: number }
+  ) =>
     request<{ message: string }>(`/admin/deposits/${id}/process`, {
       method: "POST",
-      body: { action, ...(note ? { note } : {}) },
+      body: {
+        action: input.action,
+        ...(input.note ? { note: input.note } : {}),
+        ...(input.receivedAmount !== undefined ? { receivedAmount: input.receivedAmount } : {}),
+      },
     }),
 
   withdrawals: (params: { page?: number; limit?: number; status?: RequestStatus } = {}) =>

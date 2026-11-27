@@ -477,7 +477,21 @@ export interface AdminDepositRow {
   reference: string | null
   status: RequestStatus
   hasProof: boolean
+  /** From the stored file name, so the review can preview an image inline. */
+  proofKind: "image" | "pdf" | "file" | null
+  /** Deposits this client has had approved, this one included if it was. */
+  userApprovedDeposits: number
+  reviewedBy: string | null
+  reviewedAt: string | null
+  reviewNote: string | null
   createdAt: string
+}
+
+export interface AdminDepositSummary {
+  pending: { count: number; amount: string; oldestAt: string | null }
+  approvedToday: { count: number; amount: string }
+  approved30d: { count: number; amount: string }
+  rejected30d: number
 }
 
 export interface AdminWithdrawalRow {

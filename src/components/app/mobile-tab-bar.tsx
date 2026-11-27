@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Dialog } from "radix-ui"
@@ -10,6 +10,7 @@ import theme from "@/app/bowline-theme.module.css"
 import { useAuth } from "@/components/providers/auth-provider"
 import { CopyButton } from "@/components/ui/copy-button"
 import { useToast } from "@/components/ui/toast"
+import { onQueuesChanged } from "@/lib/admin-events"
 import * as api from "@/lib/api/endpoints"
 import {
   adminMobileTabs,
@@ -109,6 +110,8 @@ function useQueueCounts(admin: boolean, pathname: string): Record<string, number
     () => (admin ? api.admin.stats() : Promise.resolve(null)),
     admin ? `tab-counts:${pathname}` : "tab-counts:none"
   )
+  const reload = stats.reload
+  useEffect(() => (admin ? onQueuesChanged(reload) : undefined), [admin, reload])
   const queues = stats.data?.queues
   if (!queues) return {}
   return {

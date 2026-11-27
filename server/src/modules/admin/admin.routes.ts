@@ -18,7 +18,7 @@ import {
   PIN_MAX_TTL_MINUTES,
 } from "../../config/constants.js"
 import { buildPageMeta, clientIp, created, noContent, ok, paginated } from "../../lib/http.js"
-import { serialize } from "../../lib/money.js"
+import { ZERO, serialize } from "../../lib/money.js"
 import { paginationSchema } from "../../lib/pagination.js"
 import { prisma } from "../../lib/prisma.js"
 import { asyncHandler } from "../../middleware/async-handler.js"
@@ -243,29 +243,53 @@ adminRouter.delete(
 
 /* --------------------------------------------------------------- deposits */
 
+/** What the proof file is, from its stored name, so the review can preview it. */
+function proofKind(path: string | null): "image" | "pdf" | "file" | null {
+  if (!path) return null
+  const extension = path.split(".").pop()?.toLowerCase() ?? ""
+  if (["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"].includes(extension)) return "image"
+  if (extension === "pdf") return "pdf"
+  return "file"
+}
+
+const depositFilters = paginationSchema.extend({
+  status: z.enum(RequestStatus).optional(),
+  method: z.enum(DepositMethod).optional(),
+  search: z.string().trim().max(120).optional(),
+})
+
 adminRouter.get(
   "/deposits",
-  validate({
-    query: paginationSchema.extend({
-      status: z.enum(RequestStatus).optional(),
-    }),
-  }),
+  validate({ query: depositFilters }),
   asyncHandler(async (req, res) => {
-    const query = req.query as unknown as {
-      page: number
-      limit: number
-      status?: RequestStatus
+    const query = req.query as unknown as z.infer<typeof depositFilters>
+    const search = query.search?.trim()
+    const where: Prisma.DepositRequestWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.method ? { method: query.method } : {}),
+      ...(search
+        ? {
+            OR: [
+              { reference: { contains: search, mode: "insensitive" } },
+              { user: { fullName: { contains: search, mode: "insensitive" } } },
+              { user: { email: { contains: search, mode: "insensitive" } } },
+              { user: { uid: { contains: search, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
     }
-    const where: Prisma.DepositRequestWhereInput = query.status
-      ? { status: query.status }
-      : {}
 
     const [items, total] = await Promise.all([
       prisma.depositRequest.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        // The queue is first come, first served; history reads newest first.
+        orderBy:
+          query.status === RequestStatus.PENDING
+            ? [{ createdAt: "asc" }, { id: "asc" }]
+            : [{ createdAt: "desc" }, { id: "desc" }],
         include: {
-          user: { select: { uid: true, email: true, fullName: true } },
+          user: { select: { id: true, uid: true, email: true, fullName: true } },
+          reviewedBy: { select: { fullName: true } },
         },
         skip: (query.page - 1) * query.limit,
         take: query.limit,
@@ -273,20 +297,83 @@ adminRouter.get(
       prisma.depositRequest.count({ where }),
     ])
 
+    // How many deposits each client on this page has had approved: a first
+    // deposit is the one most worth a careful look.
+    const userIds = [...new Set(items.map((item) => item.userId))]
+    const approved = userIds.length
+      ? await prisma.depositRequest.groupBy({
+          by: ["userId"],
+          where: { userId: { in: userIds }, status: RequestStatus.APPROVED },
+          _count: { _all: true },
+        })
+      : []
+    const approvedBy = new Map(approved.map((row) => [row.userId, row._count._all]))
+
     paginated(
       res,
       items.map((deposit) => ({
         id: deposit.id,
-        user: deposit.user,
+        user: { uid: deposit.user.uid, email: deposit.user.email, fullName: deposit.user.fullName },
         amount: serialize(deposit.amount),
         method: deposit.method,
         reference: deposit.reference,
         status: deposit.status,
         hasProof: Boolean(deposit.proofPath),
+        proofKind: proofKind(deposit.proofPath),
+        userApprovedDeposits: approvedBy.get(deposit.userId) ?? 0,
+        reviewedBy: deposit.reviewedBy?.fullName ?? null,
+        reviewedAt: deposit.reviewedAt,
+        reviewNote: deposit.reviewNote,
         createdAt: deposit.createdAt,
       })),
       buildPageMeta(query.page, query.limit, total)
     )
+  })
+)
+
+adminRouter.get(
+  "/deposits/summary",
+  asyncHandler(async (_req, res) => {
+    const now = new Date()
+    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+    const [pending, oldest, today, month, rejected] = await Promise.all([
+      prisma.depositRequest.aggregate({
+        where: { status: RequestStatus.PENDING },
+        _count: { _all: true },
+        _sum: { amount: true },
+      }),
+      prisma.depositRequest.findFirst({
+        where: { status: RequestStatus.PENDING },
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true },
+      }),
+      prisma.depositRequest.aggregate({
+        where: { status: RequestStatus.APPROVED, reviewedAt: { gte: startOfDay } },
+        _count: { _all: true },
+        _sum: { amount: true },
+      }),
+      prisma.depositRequest.aggregate({
+        where: { status: RequestStatus.APPROVED, reviewedAt: { gte: monthAgo } },
+        _count: { _all: true },
+        _sum: { amount: true },
+      }),
+      prisma.depositRequest.count({
+        where: { status: RequestStatus.REJECTED, reviewedAt: { gte: monthAgo } },
+      }),
+    ])
+
+    ok(res, {
+      pending: {
+        count: pending._count._all,
+        amount: serialize(pending._sum.amount ?? ZERO),
+        oldestAt: oldest?.createdAt ?? null,
+      },
+      approvedToday: { count: today._count._all, amount: serialize(today._sum.amount ?? ZERO) },
+      approved30d: { count: month._count._all, amount: serialize(month._sum.amount ?? ZERO) },
+      rejected30d: rejected,
+    })
   })
 )
 
@@ -303,10 +390,24 @@ adminRouter.post(
   "/deposits/:id/process",
   validate({
     params: idParam,
-    body: z.object({
-      action: z.enum(["approve", "reject"]),
-      note: z.string().trim().max(500).optional(),
-    }),
+    body: z
+      .object({
+        action: z.enum(["approve", "reject"]),
+        note: z.string().trim().max(500).optional(),
+        receivedAmount: z.coerce
+          .number()
+          .positive()
+          .max(100_000_000)
+          // Whole cents. `multipleOf(0.01)` misjudges values like 0.07 in floats.
+          .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+            message: "Use at most two decimal places.",
+          })
+          .optional(),
+      })
+      .refine((body) => body.action === "approve" || body.receivedAmount === undefined, {
+        message: "Only an approval takes a received amount.",
+        path: ["receivedAmount"],
+      }),
   }),
   asyncHandler(async (req, res) => {
     await processDeposit({
@@ -314,6 +415,7 @@ adminRouter.post(
       adminId: req.auth!.userId,
       action: req.body.action,
       note: req.body.note,
+      receivedAmount: req.body.receivedAmount,
       ip: clientIp(req),
     })
     ok(res, { message: `Deposit ${req.body.action}d.` })

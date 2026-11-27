@@ -103,6 +103,14 @@ export async function processDeposit(params: {
   adminId: string
   action: "approve" | "reject"
   note?: string | undefined
+  /**
+   * What actually arrived, when it differs from what the client entered: a
+   * bank fee taken in transit, a crypto network fee, a typo. Approval credits
+   * this instead, and the request is updated to match so the client's own list
+   * agrees with their balance. The original figure is kept in the transaction
+   * metadata and the audit log. Ignored on rejection.
+   */
+  receivedAmount?: number | undefined
   ip?: string | undefined
 }): Promise<void> {
   const request = await prisma.depositRequest.findUnique({
@@ -116,6 +124,15 @@ export async function processDeposit(params: {
   }
 
   const approving = params.action === "approve"
+  const requested = request.amount
+  const credited =
+    approving && params.receivedAmount !== undefined
+      ? round2(toMoney(params.receivedAmount))
+      : requested
+  if (credited.lte(0)) {
+    throw new ValidationError("The amount received must be greater than zero.")
+  }
+  const adjusted = !credited.eq(requested)
 
   await prisma.$transaction(async (tx) => {
     /*
@@ -140,6 +157,7 @@ export async function processDeposit(params: {
         reviewedById: params.adminId,
         reviewedAt: new Date(),
         reviewNote: params.note ?? null,
+        ...(adjusted ? { amount: credited } : {}),
       },
     })
 
@@ -151,13 +169,14 @@ export async function processDeposit(params: {
       const transaction = await credit(
         {
           userId: request.userId,
-          amount: request.amount,
+          amount: credited,
           category: TxCategory.DEPOSIT,
           description: `Deposit via ${request.method.toLowerCase().replace(/_/g, " ")}`,
           metadata: {
             method: request.method,
             reference: request.reference,
             depositRequestId: request.id,
+            ...(adjusted ? { requestedAmount: serialize(requested) } : {}),
           },
           processedById: params.adminId,
         },
@@ -176,9 +195,10 @@ export async function processDeposit(params: {
     action: approving ? "deposit.approve" : "deposit.reject",
     targetType: "DepositRequest",
     targetId: request.id,
+    ...(adjusted ? { before: { amount: serialize(requested) } } : {}),
     after: {
       status: approving ? "APPROVED" : "REJECTED",
-      amount: serialize(request.amount),
+      amount: serialize(credited),
       note: params.note ?? null,
     },
     ip: params.ip,
@@ -189,7 +209,7 @@ export async function processDeposit(params: {
   const email = approving
     ? sendDepositApprovedEmail(
         request.user,
-        serialize(request.amount),
+        serialize(credited),
         serialize(balance)
       )
     : sendDepositRejectedEmail(
