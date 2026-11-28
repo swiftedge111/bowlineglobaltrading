@@ -51,6 +51,8 @@ export function MobileTabBar({ variant = "user" }: { variant?: "user" | "admin" 
     <>
       <nav
         aria-label="Main"
+        // The live-chat bubble looks for this to sit above the bar.
+        data-mobile-tab-bar=""
         className="fixed inset-x-0 bottom-0 z-40 border-t border-secondary-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(9,39,57,0.18)] backdrop-blur-md lg:hidden"
       >
         <ul className="mx-auto grid h-16 max-w-xl grid-cols-5">

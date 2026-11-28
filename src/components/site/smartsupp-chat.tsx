@@ -13,6 +13,19 @@ const SMARTSUPP_KEY = process.env.NEXT_PUBLIC_SMARTSUPP_KEY?.trim()
  */
 const HIDDEN_PREFIXES = ["/admin", "/pin"]
 
+/**
+ * Lifts the chat bubble clear of the mobile tab bar, which otherwise sits on
+ * top of "More". Keyed to the tab bar itself rather than a route list, so any
+ * page that shows the bar gets the room and pages without it keep the
+ * bubble in Smartsupp's own corner. Only the button's wrapper moves: the open
+ * chat window is a separate box and keeps its full-screen layout on phones.
+ */
+const CLEAR_TAB_BAR = `@media (width < 64rem) {
+  html:has([data-mobile-tab-bar]) #smartsupp-widget-container div:has(> #widgetButtonFrame) {
+    bottom: calc(4rem + env(safe-area-inset-bottom) + 0.75rem) !important;
+  }
+}`
+
 function isHiddenOn(pathname: string) {
   return HIDDEN_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
@@ -47,6 +60,7 @@ export function SmartsuppChat() {
   // `window.smartsupp||` guard would then see it and skip loading.
   return (
     <>
+      <style>{CLEAR_TAB_BAR}</style>
       <Script id="smartsupp-embed" strategy="afterInteractive">
         {`var _smartsupp = _smartsupp || {};
 _smartsupp.key = ${JSON.stringify(SMARTSUPP_KEY)};
